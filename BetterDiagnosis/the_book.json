@@ -1,0 +1,170 @@
+{
+  "meta": {
+    "title_en": "BetterDiagnosis",
+    "title_ar": "دليل فني الصيدلية",
+    "tagline_ar": "الكتاب الميداني للعمل في الصيدلية من اليوم الأول",
+    "edition": "الإصدار 0.1",
+    "copyright": "BetterDiagnosis © 2024",
+    "language": "ar",
+    "direction": "rtl"
+  },
+  "page": {
+    "size": "A4",
+    "width_mm": 210,
+    "height_mm": 297,
+    "margin_top_mm": 22,
+    "margin_bottom_mm": 24,
+    "margin_outer_mm": 20,
+    "margin_inner_mm": 24
+  },
+  "colors": {
+    "page_bg":            "#FAF8F3",
+    "text_primary":       "#2B2118",
+    "text_secondary":     "#5C5145",
+    "text_muted":         "#9B8E7E",
+    "accent":             "#C1724A",
+    "accent_light":       "#F0E4D8",
+    "accent_dark":        "#8B4E30",
+    "border_light":       "#E0D5C5",
+    "border_medium":      "#C8B99E",
+    "prereq_accent":      "#3C6B8A",
+    "prereq_light":       "#E3EFF6",
+    "section_accent":     "#5A7A3E",
+    "section_light":      "#E8F0E3",
+    "white":              "#FFFFFF",
+    "scenario_bg":        "#FFFFFF",
+    "scenario_border":    "#D4C9B8",
+    "scenario_header_bg": "#F7F3EE",
+    "warning_bg":         "#FFF3EE",
+    "warning_border":     "#C1724A",
+    "warning_text":       "#7A3A18",
+    "tip_bg":             "#F0F7EE",
+    "tip_border":         "#5A8C62",
+    "tip_text":           "#2D5E35",
+    "question_bg":        "#F4F1FA",
+    "question_border":    "#7B68C0",
+    "dont_bg":            "#FFF0F0",
+    "dont_border":        "#C0404A",
+    "dont_text":          "#7A1A1A",
+    "diagnosis_bg":       "#EFF6FA",
+    "diagnosis_border":   "#3C6B8A",
+    "table_header_bg":    "#EDE6DA",
+    "table_row_alt":      "#FAF6F0",
+    "placeholder_bg":     "#F2EFE8",
+    "placeholder_border": "#C8B99E",
+    "placeholder_text":   "#A09080",
+    "footer_text":        "#9B8E7E",
+    "chapter_num_color":  "#C1724A"
+  },
+  "typography": {
+    "font_body":    "FreeSerif",
+    "font_bold":    "FreeSerifBold",
+    "font_latin":   "Georgia, serif",
+    "size_h1":      28,
+    "size_h2":      20,
+    "size_h3":      15,
+    "size_h4":      13,
+    "size_body":    11.5,
+    "size_small":   9.5,
+    "size_caption": 8.5,
+    "line_height":  1.85,
+    "h_line_height":1.4
+  },
+  "components": {
+    "chapter_header": {
+      "banner_height_mm": 45,
+      "number_opacity":   0.15,
+      "number_size_pt":   90,
+      "title_size_pt":    24,
+      "subtitle_size_pt": 13
+    },
+    "section_divider": {
+      "border_thickness": 2,
+      "margin_top_mm":    8,
+      "margin_bottom_mm": 4
+    },
+    "scenario_card": {
+      "border_radius_px": 8,
+      "padding_px":       18,
+      "margin_bottom_mm": 8,
+      "patient_quote_bg": "#F7F3EE",
+      "patient_quote_indent": 16
+    },
+    "box": {
+      "border_radius_px": 7,
+      "padding_px":       14,
+      "margin_mm":        5,
+      "icon_size_pt":     15
+    },
+    "table": {
+      "border_radius_px": 6,
+      "cell_padding_px":  9,
+      "header_size_pt":   10
+    },
+    "visual_placeholder": {
+      "height_px":         160,
+      "border_style":      "dashed",
+      "border_width_px":   1.5,
+      "border_radius_px":  8,
+      "icon":              "🖼",
+      "label_ar":          "مساحة للصورة التوضيحية",
+      "label_sub_ar":      "تُضاف لاحقاً"
+    }
+  },
+  "structure": {
+    "sections": [
+      {
+        "id": "prereqs",
+        "label": "القسم الأول",
+        "title_ar": "المتطلبات الأساسية",
+        "accent": "#3C6B8A",
+        "accent_light": "#E3EFF6",
+        "files": [
+          {"file": "prereq_01_terminology.md",        "title_ar": "المصطلحات الطبية",               "num": "01"},
+          {"file": "prereq_02_drug_classifications.md","title_ar": "تصنيفات الأدوية",               "num": "02"},
+          {"file": "prereq_03_antibiotics.md",         "title_ar": "المضادات الحيوية",              "num": "03"},
+          {"file": "prereq_04_analgesics_antiinflam.md","title_ar":"المسكنات ومضادات الالتهاب",    "num": "04"},
+          {"file": "prereq_05_cardiovascular.md",      "title_ar": "أدوية القلب والأوعية",         "num": "05"},
+          {"file": "prereq_06_pharma_forms.md",        "title_ar": "الأشكال الصيدلانية",           "num": "06"},
+          {"file": "prereq_07_prescription_reading.md","title_ar": "قراءة الوصفة الطبية",          "num": "07"},
+          {"file": "prereq_08_common_drug_names.md",   "title_ar": "أسماء الأدوية الشائعة",        "num": "08"}
+        ]
+      },
+      {
+        "id": "chapters",
+        "label": "القسم الثاني",
+        "title_ar": "المحتوى الرئيسي — السيناريوهات",
+        "accent": "#C1724A",
+        "accent_light": "#F0E4D8",
+        "files": [
+          {"file": "ch01_nervous_pain.md",         "title_ar": "الجهاز العصبي والألم",            "num": "01"},
+          {"file": "ch02_cardiovascular.md",        "title_ar": "القلب والأوعية الدموية",         "num": "02"},
+          {"file": "ch03_metabolic_diabetes.md",    "title_ar": "الأمراض المزمنة والأيضية",       "num": "03"},
+          {"file": "ch04_respiratory_allergy.md",   "title_ar": "الجهاز التنفسي والحساسية",       "num": "04"},
+          {"file": "ch05_ent_eyes.md",              "title_ar": "العيون والأذن والأنف",            "num": "05"},
+          {"file": "ch06_gi_liver.md",              "title_ar": "الجهاز الهضمي والكبد",           "num": "06"},
+          {"file": "ch07_antimicrobials.md",        "title_ar": "المضادات الميكروبية",            "num": "07"},
+          {"file": "ch08_injectables.md",           "title_ar": "الأدوية الحيوية والحقن",         "num": "08"},
+          {"file": "ch09_dermatology.md",           "title_ar": "الجلد والعناية الموضعية",        "num": "09"},
+          {"file": "ch10_vitamins_supplements.md",  "title_ar": "الفيتامينات والمكملات",          "num": "10"},
+          {"file": "ch11_womens_pediatric.md",      "title_ar": "صحة المرأة والأطفال",            "num": "11"},
+          {"file": "ch12_emergency.md",             "title_ar": "الإسعافات الأولية والطوارئ",     "num": "12"}
+        ]
+      },
+      {
+        "id": "extra",
+        "label": "القسم الثالث",
+        "title_ar": "الأقسام الإضافية",
+        "accent": "#5A7A3E",
+        "accent_light": "#E8F0E3",
+        "files": [
+          {"file": "section_01_drug_interactions.md", "title_ar": "التفاعلات الدوائية",           "num": "01"},
+          {"file": "section_02_lab_results.md",       "title_ar": "قراءة نتائج التحاليل",         "num": "02"},
+          {"file": "section_03_storage_inventory.md", "title_ar": "التخزين وإدارة المخزون",       "num": "03"},
+          {"file": "section_04_geriatrics.md",        "title_ar": "المريض المسن في الصيدلية",     "num": "04"},
+          {"file": "section_05_fasting_medications.md","title_ar":"الصيام والأدوية",              "num": "05"}
+        ]
+      }
+    ]
+  }
+}
