@@ -126,10 +126,10 @@ META = CFG["meta"]
 # ═══════════════════════════════════════════════════════════════════════
 PAGE_W_MM = 152      # 6 in
 PAGE_H_MM = 229      # 9 in
-MARGIN_TOP_MM    = 16
-MARGIN_BOTTOM_MM = 18
-MARGIN_OUTER_MM  = 14
-MARGIN_INNER_MM  = 16
+MARGIN_TOP_MM    = 14
+MARGIN_BOTTOM_MM = 15
+MARGIN_OUTER_MM  = 12
+MARGIN_INNER_MM  = 14
 
 # ═══════════════════════════════════════════════════════════════════════
 # FONT DETECTION  (no zoom hack — sizes are真 print pt values directly)
@@ -216,7 +216,11 @@ def build_css():
 html, body {{
   font-family: {fam};
   font-size: {pt(T['size_body'])}pt;
-  line-height: {T['line_height']};
+  /* FIX: 1.5 instead of the_book.json's 1.85 — 1.85 is manuscript/
+     draft-style spacing, not print-book spacing, and was a major
+     contributor to pages feeling under-filled with too much
+     whitespace between every line of body text. */
+  line-height: 1.5;
   color: {C['text_primary']};
   background: {C['page_bg']};
   direction: rtl;
@@ -354,6 +358,9 @@ code.ltr-inline {{
   margin: 12px 0 16px;
   page-break-inside: avoid;
   text-align: center;
+  /* aspect-ratio is set inline per-instance (e.g. "16/9") via the
+     visual_placeholder() Python function — WeasyPrint supports the
+     CSS aspect-ratio property natively. */
 }}
 .visual-placeholder .vp-cell {{
   display: table-cell;
@@ -370,61 +377,83 @@ code.ltr-inline {{
   color: {C['placeholder_text']};
   opacity: 0.7;
 }}
+.visual-placeholder .vp-marker {{
+  /* Real (searchable) text in the PDF's text layer, kept visually
+     unobtrusive. Used by generate_image_spec() to locate which actual
+     printed page each placeholder landed on after rendering. */
+  font-size: 5pt;
+  color: {C['placeholder_bg']};
+  opacity: 0.35;
+  margin-top: 2px;
+  direction: ltr;
+  unicode-bidi: isolate;
+}}
 
-/* ── Headings ── */
+/* ── Headings ──
+   FIX: removed stale *0.72/*0.78/*0.85/*0.9 shrink multipliers. These
+   were defensive compensation for the old 96-DPI zoom hack on an
+   oversized A4 page (both since removed). On the correct 6"×9" trim
+   with direct-pt sizing, full the_book.json sizes are used as-is —
+   this is also a major contributor to the "content doesn't fill the
+   page" complaint: headings were rendering ~25% smaller than intended,
+   leaving more white space relative to body text mass. */
 h1 {{
-  font-size: {pt(T['size_h1']*0.72)}pt; font-weight: bold;
+  font-size: {pt(T['size_h1'])}pt; font-weight: bold;
   color: {C['text_primary']};
   line-height: {T['h_line_height']};
-  margin: 16px 0 8px;
-  padding-bottom: 6px;
+  margin: 18px 0 10px;
+  padding-bottom: 7px;
   border-bottom: 2px solid {C['border_light']};
 }}
 h2 {{
-  font-size: {pt(T['size_h2']*0.78)}pt; font-weight: bold;
+  font-size: {pt(T['size_h2'])}pt; font-weight: bold;
   color: {C['text_primary']};
-  margin: 14px 0 7px;
-  padding-right: 11px;
+  margin: 16px 0 8px;
+  padding-right: 12px;
   border-right: 3px solid {C['accent']};
 }}
 h2.prereq {{ border-right-color: {C['prereq_accent']}; }}
 h2.extra  {{ border-right-color: {C['section_accent']}; }}
 h3 {{
-  font-size: {pt(T['size_h3']*0.85)}pt; font-weight: bold;
+  font-size: {pt(T['size_h3'])}pt; font-weight: bold;
   color: {C['text_secondary']};
-  margin: 11px 0 6px;
+  margin: 13px 0 7px;
 }}
 h4 {{
-  font-size: {pt(T['size_h4']*0.9)}pt; font-weight: bold;
+  font-size: {pt(T['size_h4'])}pt; font-weight: bold;
   color: {C['text_secondary']};
-  margin: 9px 0 4px;
+  margin: 10px 0 5px;
 }}
 
-/* ── Body ── */
-p {{ margin-bottom: 7px; }}
+/* ── Body ──
+   FIX: line-height tightened from 1.85 (manuscript/draft spacing) to
+   1.5 (standard printed-book spacing). 1.85 was a major cause of pages
+   looking sparse/under-filled — each paragraph consumed far more
+   vertical space than its character count justified. */
+p {{ margin-bottom: 8px; }}
 strong {{ font-weight: bold; color: {C['text_primary']}; }}
 em {{ font-style: italic; }}
 code {{
   font-family: 'Courier New', 'DejaVu Sans Mono', monospace;
   background: {C['accent_light']};
   padding: 1px 4px; border-radius: 3px;
-  font-size: {pt(8)}pt;
+  font-size: {pt(8.5)}pt;
 }}
 
-ul, ol {{ padding-right: 17px; margin: 6px 0 9px; }}
-li {{ margin-bottom: 3px; line-height: {T['line_height']}; }}
+ul, ol {{ padding-right: 18px; margin: 7px 0 10px; }}
+li {{ margin-bottom: 4px; line-height: 1.5; }}
 
 /* ── Topic divider ── */
 .topic-divider {{
   display: table;
   width: 100%;
-  margin: 16px 0 10px;
+  margin: 18px 0 11px;
   page-break-inside: avoid;
 }}
 .topic-divider .td-row {{ display: table-row; }}
 .topic-divider .td-label {{
   display: table-cell;
-  font-size: {pt(T['size_h2']*0.78)}pt; font-weight: bold;
+  font-size: {pt(T['size_h2'])}pt; font-weight: bold;
   color: {C['text_primary']};
   white-space: nowrap;
   padding-left: 8px;
@@ -543,6 +572,88 @@ pre {{
 }}
 
 hr {{ border: none; border-top: 1px solid {C['border_light']}; margin: 10px 0; }}
+
+/* ── Table of Contents ──
+   .toc-pagenum::after uses CSS target-counter(), a Paged-Media feature
+   WeasyPrint implements correctly: it resolves to the actual final page
+   number of whatever element the <a href="#..."> link points to, at
+   render time. No Python page-counting pass needed. */
+.toc-page {{
+  padding-top: 4px;
+}}
+.toc-heading {{
+  font-size: {pt(26)}pt;
+  font-weight: bold;
+  color: {C['text_primary']};
+  text-align: center;
+  margin-bottom: 2px;
+}}
+.toc-heading-sub {{
+  font-size: {pt(9)}pt;
+  color: {C['text_muted']};
+  text-align: center;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  direction: ltr;
+  margin-bottom: 22px;
+}}
+.toc-section-row {{
+  margin: 18px 0 8px;
+  padding-bottom: 5px;
+  border-bottom: 1.5px solid {C['accent']};
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}}
+.toc-section-row:first-child {{ margin-top: 0; }}
+.toc-section-label {{
+  font-size: {pt(8.5)}pt;
+  color: {C['text_muted']};
+  letter-spacing: .1em;
+}}
+.toc-section-title {{
+  font-size: {pt(13)}pt;
+  font-weight: bold;
+  color: {C['accent_dark']};
+}}
+.toc-row {{ margin: 0; }}
+.toc-link {{
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 2px;
+  text-decoration: none;
+  color: {C['text_primary']};
+  font-size: {pt(10)}pt;
+}}
+.toc-chapter-num {{
+  color: {C['text_muted']};
+  font-size: {pt(8.5)}pt;
+  flex-shrink: 0;
+  min-width: 16px;
+}}
+.toc-chapter-title {{
+  flex-shrink: 0;
+}}
+.toc-dots {{
+  flex: 1;
+  border-bottom: 1px dotted {C['border_medium']};
+  margin: 0 4px;
+  transform: translateY(-3px);
+}}
+.toc-pagenum {{
+  flex-shrink: 0;
+  font-size: {pt(9.5)}pt;
+  color: {C['accent_dark']};
+  font-weight: bold;
+  direction: ltr;
+  min-width: 20px;
+  text-align: left;
+}}
+/* The actual page-number magic: */
+.toc-pagenum::after {{
+  content: target-counter(attr(href), page);
+}}
 """
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -678,11 +789,53 @@ def make_table(lines):
     html.append('</tbody></table>')
     return '\n'.join(html) + '\n'
 
-def visual_placeholder(label="مساحة للصورة التوضيحية", sub="تُضاف لاحقاً"):
-    return (f'<div class="visual-placeholder"><div class="vp-cell">'
-            f'<div class="vp-label">[ {esc(label)} ]</div>'
-            f'<div class="vp-sub">{esc(sub)}</div>'
-            f'</div></div>\n')
+# ═══════════════════════════════════════════════════════════════════════
+# IMAGE PLACEHOLDER REGISTRY
+# ═══════════════════════════════════════════════════════════════════════
+# Every visual_placeholder() call appends one entry here. After the PDF is
+# rendered, a second pass (see generate_image_spec() at the bottom of this
+# file) searches the PDF's text layer for each entry's unique marker
+# string to find which real page it landed on, then writes
+# image_specs.md — a reference file listing every image slot in the book
+# with: page number, a content-aware description of what the image
+# should depict, and the intended aspect ratio (derived from the actual
+# CSS box it renders inside, so the ratio matches the real printed slot).
+IMAGE_REGISTRY = []
+
+def visual_placeholder(kind, description_ar, description_en, aspect_ratio,
+                        context_title="", min_height_px=110):
+    """
+    kind            : short machine tag, e.g. 'chapter-cover', 'scenario'
+    description_ar  : what the image should depict (Arabic, for the book)
+    description_en  : same, in English (for the image_specs.md reference file)
+    aspect_ratio     : intended W:H ratio as a string, e.g. "16:9", "4:3", "1:1"
+    context_title    : chapter/topic title this placeholder belongs to,
+                        used only for the spec file, not shown in the PDF
+    min_height_px    : controls the rendered box height in the PDF itself
+    """
+    idx = len(IMAGE_REGISTRY) + 1
+    marker = f"IMGSLOT-{idx:03d}"
+    IMAGE_REGISTRY.append({
+        "id": marker,
+        "kind": kind,
+        "context": context_title,
+        "description_ar": description_ar,
+        "description_en": description_en,
+        "aspect_ratio": aspect_ratio,
+    })
+    # The marker is rendered as real (tiny, unobtrusive) text in the PDF
+    # so the post-render pass can locate its page via text search. It is
+    # styled to be visually negligible but NOT removed from the layout,
+    # since WeasyPrint (correctly) does not expose a page-number-lookup
+    # API from Python — searching rendered text is the reliable approach.
+    return (
+        f'<div class="visual-placeholder" style="aspect-ratio:{aspect_ratio.replace(":","/")}; min-height:{min_height_px}px">'
+        f'<div class="vp-cell">'
+        f'<div class="vp-label">[ {esc(description_ar)} ]</div>'
+        f'<div class="vp-sub">نسبة الأبعاد المقترحة: {esc(aspect_ratio)} &nbsp;·&nbsp; تُضاف لاحقاً</div>'
+        f'<div class="vp-marker">{marker}</div>'
+        f'</div></div>\n'
+    )
 
 BOX_MAP = {
     '⚡': ('box-question', 'اسأل أولاً'),
@@ -704,7 +857,7 @@ def render_box(emoji, items):
 # ═══════════════════════════════════════════════════════════════════════
 # MARKDOWN → HTML PARSER
 # ═══════════════════════════════════════════════════════════════════════
-def md2html(md, h2_class=""):
+def md2html(md, h2_class="", chapter_title="", chapter_num=""):
     lines   = md.split('\n')
     out     = []
     i       = 0
@@ -717,6 +870,7 @@ def md2html(md, h2_class=""):
     in_sc   = False
     sc_head = ""
     sc_buf  = []
+    current_topic = ""   # tracks the most recent ## 📌 topic, for placeholder context
 
     def push(el):
         (sc_buf if in_sc else out).append(el)
@@ -771,10 +925,25 @@ def md2html(md, h2_class=""):
             flush_list(); i += 1; continue
 
         # H1 — SKIP rendering text (chapter header from JSON used instead);
-        # just emit the chapter-illustration placeholder once.
+        # just emit ONE chapter-cover illustration placeholder, with a
+        # description tailored to this specific chapter's subject.
         if line.startswith('# '):
             flush_list(); flush_box(); flush_scenario()
-            out.append(visual_placeholder("صورة توضيحية للفصل"))
+            out.append(visual_placeholder(
+                kind="chapter-cover",
+                description_ar=f"صورة غلاف توضيحية لفصل: {chapter_title}",
+                description_en=(
+                    f"Chapter-opening illustration for '{chapter_title}'. "
+                    f"Should visually represent the chapter's medical subject "
+                    f"area at a glance (e.g. a clean icon-style or editorial "
+                    f"illustration relevant to the topic) — this is the large "
+                    f"image readers see first when opening the chapter, right "
+                    f"under the colored chapter-title banner."
+                ),
+                aspect_ratio="16:9",
+                context_title=f"الفصل {chapter_num} — {chapter_title}",
+                min_height_px=140,
+            ))
             i += 1; continue
 
         # Topic divider  ## 📌 ...
@@ -900,8 +1069,9 @@ def section_page(sec):
 def chapter_header(item, sec):
     color = sec["accent"]
     lbl   = f'{esc(sec["label"])} — الفصل {esc(item["num"])}'
+    anchor_id = f'ch-{sec["id"]}-{item["num"]}'
     return (
-        f'<div class="chapter-header" style="background:{color}">'
+        f'<div class="chapter-header" id="{anchor_id}" style="background:{color}">'
         f'<div class="ch-bgnum ltr">{item["num"]}</div>'
         '<div class="ch-inner">'
         f'<div class="ch-label">{lbl}</div>'
@@ -910,8 +1080,26 @@ def chapter_header(item, sec):
     )
 
 def title_page():
+    cover_img = visual_placeholder(
+        kind="front-cover",
+        description_ar="صورة غلاف الكتاب الرئيسية",
+        description_en=(
+            "Main front-cover illustration for the whole book. Should "
+            "capture the book's identity at a glance — pharmacy/medical "
+            "still-life elements (e.g. mortar and pestle, pill blister "
+            "pack, medicine bottles, a stethoscope, or similar pharmacy-"
+            "themed iconography), in a style that reads as professional "
+            "and editorial rather than clinical/sterile. This is the "
+            "single most important image in the book — it sets the tone "
+            "for everything after it."
+        ),
+        aspect_ratio="4:3",
+        context_title="غلاف الكتاب — Front Cover",
+        min_height_px=180,
+    )
     return (
         '<div class="title-page"><div class="tp-cell">'
+        f'<div style="max-width:78%; margin:0 auto 18px">{cover_img}</div>'
         f'<div style="font-family:\'{FONT_NAME}\',serif;font-size:{pt(30)}pt;font-weight:bold;'
         f'color:{C["accent"]};letter-spacing:-.01em;margin-bottom:4px;direction:ltr">'
         'BetterDiagnosis</div>'
@@ -928,6 +1116,48 @@ def title_page():
 def resolve(filename, sec_id):
     return (BOOK_ROOT if sec_id == "prereqs" else MAIN_DIR) / filename
 
+def toc_page():
+    """
+    Table of Contents — placed after the title page, before Section 1.
+
+    Page numbers are resolved automatically by WeasyPrint at render time
+    using CSS target-counter(), which reads the actual final page number
+    of the element with the matching #id — no Python-side page-counting
+    pass or post-processing needed. This is a native CSS Paged Media
+    feature WeasyPrint implements correctly (and wkhtmltopdf did not
+    support reliably, which is part of why this wasn't attempted with
+    the old engine).
+    """
+    rows = []
+    for sec in CFG["structure"]["sections"]:
+        rows.append(
+            f'<div class="toc-section-row">'
+            f'<span class="toc-section-label">{esc(sec["label"])}</span>'
+            f'<span class="toc-section-title">{esc(sec["title_ar"])}</span>'
+            f'</div>'
+        )
+        for item in sec["files"]:
+            anchor_id = f'ch-{sec["id"]}-{item["num"]}'
+            rows.append(
+                '<div class="toc-row">'
+                f'<a class="toc-link" href="#{anchor_id}">'
+                f'<span class="toc-chapter-num ltr">{esc(item["num"])}</span>'
+                f'<span class="toc-chapter-title">{esc(item["title_ar"])}</span>'
+                '<span class="toc-dots"></span>'
+                '<span class="toc-pagenum"></span>'
+                '</a>'
+                '</div>'
+            )
+
+    return (
+        '<div class="toc-page break-before">'
+        f'<div class="toc-heading">الفهرس</div>'
+        f'<div class="toc-heading-sub">Table of Contents</div>'
+        '<div class="toc-body">'
+        + ''.join(rows) +
+        '</div></div>\n'
+    )
+
 # ═══════════════════════════════════════════════════════════════════════
 # BUILD
 # ═══════════════════════════════════════════════════════════════════════
@@ -937,6 +1167,7 @@ def build():
 <html lang="ar" dir="rtl"><head><meta charset="UTF-8"/><title>BetterDiagnosis</title>
 <style>{css}</style></head><body>
 {title_page()}
+{toc_page()}
 """]
 
     for sec in CFG["structure"]["sections"]:
@@ -951,7 +1182,7 @@ def build():
             md = path.read_text(encoding="utf-8")
             print(f"  ✓  {item['file']}")
             parts.append(chapter_header(item, sec))
-            parts.append(md2html(md, h2_class=h2c))
+            parts.append(md2html(md, h2_class=h2c, chapter_title=item["title_ar"], chapter_num=item["num"]))
             parts.append(
                 f'<div class="ch-footer">{esc(sec["label"])} — {esc(item["title_ar"])} '
                 f'&nbsp;&middot;&nbsp; BetterDiagnosis {esc(META["edition"])}</div>\n'
@@ -961,6 +1192,77 @@ def build():
 
     parts.append("</body></html>")
     return ''.join(parts)
+
+# ═══════════════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════════════
+def generate_image_spec(pdf_path: Path, out_path: Path):
+    """
+    Second pass, run after the PDF exists: searches every page's text
+    layer for each IMGSLOT-NNN marker (rendered as near-invisible real
+    text by visual_placeholder()) to find which actual page it landed
+    on, then writes image_specs.md — a single reference file listing
+    every image slot in the book with its page number, a description
+    of what it should depict, and its intended aspect ratio.
+
+    This has to be a post-render pass (not computed during HTML build)
+    because page numbers only exist after WeasyPrint has paginated the
+    full flowed content — there is no reliable way to predict final
+    page numbers from the source HTML alone.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        print("\n⚠ pypdf not installed — skipping image_specs.md generation.")
+        print("  Run: pip install pypdf")
+        return
+
+    print("\nLocating image placeholders in rendered PDF...")
+    reader = PdfReader(str(pdf_path))
+    marker_to_page = {}
+    for entry in IMAGE_REGISTRY:
+        marker_to_page[entry["id"]] = None
+
+    for page_num, page in enumerate(reader.pages, start=1):
+        text = page.extract_text() or ""
+        for marker in marker_to_page:
+            if marker_to_page[marker] is None and marker in text:
+                marker_to_page[marker] = page_num
+
+    lines = [
+        "# BetterDiagnosis — Image Specification Sheet",
+        "",
+        "> Auto-generated by build_book_local.py after PDF render.",
+        "> Each entry below corresponds to one dashed placeholder box in the PDF.",
+        "> Page numbers refer to the actual printed page in BetterDiagnosis_book.pdf.",
+        "> Colors, line style, and exact visual treatment are intentionally left",
+        "> undefined here — only content/composition and aspect ratio are specified.",
+        "",
+        f"**Total image slots:** {len(IMAGE_REGISTRY)}",
+        "",
+        "---",
+        "",
+    ]
+
+    for entry in IMAGE_REGISTRY:
+        page_num = marker_to_page.get(entry["id"])
+        page_str = f"Page {page_num}" if page_num else "Page: NOT FOUND (check marker rendering)"
+        lines.append(f"## {entry['id']} — {page_str}")
+        lines.append("")
+        lines.append(f"- **Kind:** `{entry['kind']}`")
+        if entry["context"]:
+            lines.append(f"- **Context:** {entry['context']}")
+        lines.append(f"- **Aspect ratio:** {entry['aspect_ratio']}")
+        lines.append(f"- **Description (AR):** {entry['description_ar']}")
+        lines.append(f"- **Description (EN):** {entry['description_en']}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    out_path.write_text('\n'.join(lines), encoding="utf-8")
+    found = sum(1 for v in marker_to_page.values() if v is not None)
+    print(f"✓ image_specs.md written: {found}/{len(IMAGE_REGISTRY)} placeholders located")
+    print(f"  → {out_path}")
 
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN
@@ -994,6 +1296,10 @@ if __name__ == "__main__":
         mb = OUT_PDF.stat().st_size / 1_000_000
         print(f"\n✓ Done! PDF: {OUT_PDF}")
         print(f"  Size: {mb:.1f} MB")
+
+        OUT_IMAGE_SPEC = SCRIPT_DIR / "image_specs.md"
+        generate_image_spec(OUT_PDF, OUT_IMAGE_SPEC)
+
     except Exception as e:
         print(f"\n✗ WeasyPrint error:\n{e}")
         sys.exit(1)

@@ -17,7 +17,7 @@
 
 @page {
   size: 152mm 229mm;
-  margin: 16mm 14mm 18mm 16mm;
+  margin: 14mm 12mm 15mm 14mm;
 
   /* ── Running footer (WeasyPrint renders @page margin boxes natively —
      no command-line --footer-* flags needed like wkhtmltopdf required) ── */
@@ -44,7 +44,11 @@
 html, body {
   font-family: 'BookFont', 'FreeSerif', 'Arial Unicode MS', serif;
   font-size: 11.5pt;
-  line-height: 1.85;
+  /* FIX: 1.5 instead of the_book.json's 1.85 — 1.85 is manuscript/
+     draft-style spacing, not print-book spacing, and was a major
+     contributor to pages feeling under-filled with too much
+     whitespace between every line of body text. */
+  line-height: 1.5;
   color: #2B2118;
   background: #FAF8F3;
   direction: rtl;
@@ -182,6 +186,9 @@ code.ltr-inline {
   margin: 12px 0 16px;
   page-break-inside: avoid;
   text-align: center;
+  /* aspect-ratio is set inline per-instance (e.g. "16/9") via the
+     visual_placeholder() Python function — WeasyPrint supports the
+     CSS aspect-ratio property natively. */
 }
 .visual-placeholder .vp-cell {
   display: table-cell;
@@ -198,61 +205,83 @@ code.ltr-inline {
   color: #A09080;
   opacity: 0.7;
 }
+.visual-placeholder .vp-marker {
+  /* Real (searchable) text in the PDF's text layer, kept visually
+     unobtrusive. Used by generate_image_spec() to locate which actual
+     printed page each placeholder landed on after rendering. */
+  font-size: 5pt;
+  color: #F2EFE8;
+  opacity: 0.35;
+  margin-top: 2px;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
 
-/* ── Headings ── */
+/* ── Headings ──
+   FIX: removed stale *0.72/*0.78/*0.85/*0.9 shrink multipliers. These
+   were defensive compensation for the old 96-DPI zoom hack on an
+   oversized A4 page (both since removed). On the correct 6"×9" trim
+   with direct-pt sizing, full the_book.json sizes are used as-is —
+   this is also a major contributor to the "content doesn't fill the
+   page" complaint: headings were rendering ~25% smaller than intended,
+   leaving more white space relative to body text mass. */
 h1 {
-  font-size: 20.16pt; font-weight: bold;
+  font-size: 28pt; font-weight: bold;
   color: #2B2118;
   line-height: 1.4;
-  margin: 16px 0 8px;
-  padding-bottom: 6px;
+  margin: 18px 0 10px;
+  padding-bottom: 7px;
   border-bottom: 2px solid #E0D5C5;
 }
 h2 {
-  font-size: 15.600000000000001pt; font-weight: bold;
+  font-size: 20pt; font-weight: bold;
   color: #2B2118;
-  margin: 14px 0 7px;
-  padding-right: 11px;
+  margin: 16px 0 8px;
+  padding-right: 12px;
   border-right: 3px solid #C1724A;
 }
 h2.prereq { border-right-color: #3C6B8A; }
 h2.extra  { border-right-color: #5A7A3E; }
 h3 {
-  font-size: 12.75pt; font-weight: bold;
+  font-size: 15pt; font-weight: bold;
   color: #5C5145;
-  margin: 11px 0 6px;
+  margin: 13px 0 7px;
 }
 h4 {
-  font-size: 11.700000000000001pt; font-weight: bold;
+  font-size: 13pt; font-weight: bold;
   color: #5C5145;
-  margin: 9px 0 4px;
+  margin: 10px 0 5px;
 }
 
-/* ── Body ── */
-p { margin-bottom: 7px; }
+/* ── Body ──
+   FIX: line-height tightened from 1.85 (manuscript/draft spacing) to
+   1.5 (standard printed-book spacing). 1.85 was a major cause of pages
+   looking sparse/under-filled — each paragraph consumed far more
+   vertical space than its character count justified. */
+p { margin-bottom: 8px; }
 strong { font-weight: bold; color: #2B2118; }
 em { font-style: italic; }
 code {
   font-family: 'Courier New', 'DejaVu Sans Mono', monospace;
   background: #F0E4D8;
   padding: 1px 4px; border-radius: 3px;
-  font-size: 8pt;
+  font-size: 8.5pt;
 }
 
-ul, ol { padding-right: 17px; margin: 6px 0 9px; }
-li { margin-bottom: 3px; line-height: 1.85; }
+ul, ol { padding-right: 18px; margin: 7px 0 10px; }
+li { margin-bottom: 4px; line-height: 1.5; }
 
 /* ── Topic divider ── */
 .topic-divider {
   display: table;
   width: 100%;
-  margin: 16px 0 10px;
+  margin: 18px 0 11px;
   page-break-inside: avoid;
 }
 .topic-divider .td-row { display: table-row; }
 .topic-divider .td-label {
   display: table-cell;
-  font-size: 15.600000000000001pt; font-weight: bold;
+  font-size: 20pt; font-weight: bold;
   color: #2B2118;
   white-space: nowrap;
   padding-left: 8px;
@@ -371,12 +400,97 @@ pre {
 }
 
 hr { border: none; border-top: 1px solid #E0D5C5; margin: 10px 0; }
+
+/* ── Table of Contents ──
+   .toc-pagenum::after uses CSS target-counter(), a Paged-Media feature
+   WeasyPrint implements correctly: it resolves to the actual final page
+   number of whatever element the <a href="#..."> link points to, at
+   render time. No Python page-counting pass needed. */
+.toc-page {
+  padding-top: 4px;
+}
+.toc-heading {
+  font-size: 26pt;
+  font-weight: bold;
+  color: #2B2118;
+  text-align: center;
+  margin-bottom: 2px;
+}
+.toc-heading-sub {
+  font-size: 9pt;
+  color: #9B8E7E;
+  text-align: center;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  direction: ltr;
+  margin-bottom: 22px;
+}
+.toc-section-row {
+  margin: 18px 0 8px;
+  padding-bottom: 5px;
+  border-bottom: 1.5px solid #C1724A;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.toc-section-row:first-child { margin-top: 0; }
+.toc-section-label {
+  font-size: 8.5pt;
+  color: #9B8E7E;
+  letter-spacing: .1em;
+}
+.toc-section-title {
+  font-size: 13pt;
+  font-weight: bold;
+  color: #8B4E30;
+}
+.toc-row { margin: 0; }
+.toc-link {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 2px;
+  text-decoration: none;
+  color: #2B2118;
+  font-size: 10pt;
+}
+.toc-chapter-num {
+  color: #9B8E7E;
+  font-size: 8.5pt;
+  flex-shrink: 0;
+  min-width: 16px;
+}
+.toc-chapter-title {
+  flex-shrink: 0;
+}
+.toc-dots {
+  flex: 1;
+  border-bottom: 1px dotted #C8B99E;
+  margin: 0 4px;
+  transform: translateY(-3px);
+}
+.toc-pagenum {
+  flex-shrink: 0;
+  font-size: 9.5pt;
+  color: #8B4E30;
+  font-weight: bold;
+  direction: ltr;
+  min-width: 20px;
+  text-align: left;
+}
+/* The actual page-number magic: */
+.toc-pagenum::after {
+  content: target-counter(attr(href), page);
+}
 </style></head><body>
-<div class="title-page"><div class="tp-cell"><div style="font-family:'FreeSerif',serif;font-size:30pt;font-weight:bold;color:#C1724A;letter-spacing:-.01em;margin-bottom:4px;direction:ltr">BetterDiagnosis</div><div style="font-size:19pt;font-weight:bold;color:#2B2118;margin-bottom:10px">دليل فني الصيدلية</div><div style="width:42px;height:3px;background:#C1724A;border-radius:2px;margin:0 auto 14px"></div><div style="font-size:10pt;color:#5C5145;margin-bottom:28px">الكتاب الميداني للعمل في الصيدلية من اليوم الأول</div><div style="font-size:7.5pt;color:#9B8E7E">الإصدار 0.1 &nbsp;&middot;&nbsp; BetterDiagnosis © 2024</div></div></div>
+<div class="title-page"><div class="tp-cell"><div style="max-width:78%; margin:0 auto 18px"><div class="visual-placeholder" style="aspect-ratio:4/3; min-height:180px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف الكتاب الرئيسية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 4:3 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-001</div></div></div>
+</div><div style="font-family:'FreeSerif',serif;font-size:30pt;font-weight:bold;color:#C1724A;letter-spacing:-.01em;margin-bottom:4px;direction:ltr">BetterDiagnosis</div><div style="font-size:19pt;font-weight:bold;color:#2B2118;margin-bottom:10px">دليل فني الصيدلية</div><div style="width:42px;height:3px;background:#C1724A;border-radius:2px;margin:0 auto 14px"></div><div style="font-size:10pt;color:#5C5145;margin-bottom:28px">الكتاب الميداني للعمل في الصيدلية من اليوم الأول</div><div style="font-size:7.5pt;color:#9B8E7E">الإصدار 0.1 &nbsp;&middot;&nbsp; BetterDiagnosis © 2024</div></div></div>
+
+<div class="toc-page break-before"><div class="toc-heading">الفهرس</div><div class="toc-heading-sub">Table of Contents</div><div class="toc-body"><div class="toc-section-row"><span class="toc-section-label">القسم الأول</span><span class="toc-section-title">المتطلبات الأساسية</span></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-01"><span class="toc-chapter-num ltr">01</span><span class="toc-chapter-title">المصطلحات الطبية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-02"><span class="toc-chapter-num ltr">02</span><span class="toc-chapter-title">تصنيفات الأدوية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-03"><span class="toc-chapter-num ltr">03</span><span class="toc-chapter-title">المضادات الحيوية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-04"><span class="toc-chapter-num ltr">04</span><span class="toc-chapter-title">المسكنات ومضادات الالتهاب</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-05"><span class="toc-chapter-num ltr">05</span><span class="toc-chapter-title">أدوية القلب والأوعية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-06"><span class="toc-chapter-num ltr">06</span><span class="toc-chapter-title">الأشكال الصيدلانية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-07"><span class="toc-chapter-num ltr">07</span><span class="toc-chapter-title">قراءة الوصفة الطبية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-prereqs-08"><span class="toc-chapter-num ltr">08</span><span class="toc-chapter-title">أسماء الأدوية الشائعة</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-section-row"><span class="toc-section-label">القسم الثاني</span><span class="toc-section-title">المحتوى الرئيسي — السيناريوهات</span></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-01"><span class="toc-chapter-num ltr">01</span><span class="toc-chapter-title">الجهاز العصبي والألم</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-02"><span class="toc-chapter-num ltr">02</span><span class="toc-chapter-title">القلب والأوعية الدموية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-03"><span class="toc-chapter-num ltr">03</span><span class="toc-chapter-title">الأمراض المزمنة والأيضية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-04"><span class="toc-chapter-num ltr">04</span><span class="toc-chapter-title">الجهاز التنفسي والحساسية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-05"><span class="toc-chapter-num ltr">05</span><span class="toc-chapter-title">العيون والأذن والأنف</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-06"><span class="toc-chapter-num ltr">06</span><span class="toc-chapter-title">الجهاز الهضمي والكبد</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-07"><span class="toc-chapter-num ltr">07</span><span class="toc-chapter-title">المضادات الميكروبية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-08"><span class="toc-chapter-num ltr">08</span><span class="toc-chapter-title">الأدوية الحيوية والحقن</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-09"><span class="toc-chapter-num ltr">09</span><span class="toc-chapter-title">الجلد والعناية الموضعية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-10"><span class="toc-chapter-num ltr">10</span><span class="toc-chapter-title">الفيتامينات والمكملات</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-11"><span class="toc-chapter-num ltr">11</span><span class="toc-chapter-title">صحة المرأة والأطفال</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-chapters-12"><span class="toc-chapter-num ltr">12</span><span class="toc-chapter-title">الإسعافات الأولية والطوارئ</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-section-row"><span class="toc-section-label">القسم الثالث</span><span class="toc-section-title">الأقسام الإضافية</span></div><div class="toc-row"><a class="toc-link" href="#ch-extra-01"><span class="toc-chapter-num ltr">01</span><span class="toc-chapter-title">التفاعلات الدوائية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-extra-02"><span class="toc-chapter-num ltr">02</span><span class="toc-chapter-title">قراءة نتائج التحاليل</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-extra-03"><span class="toc-chapter-num ltr">03</span><span class="toc-chapter-title">التخزين وإدارة المخزون</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-extra-04"><span class="toc-chapter-num ltr">04</span><span class="toc-chapter-title">المريض المسن في الصيدلية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div><div class="toc-row"><a class="toc-link" href="#ch-extra-05"><span class="toc-chapter-num ltr">05</span><span class="toc-chapter-title">الصيام والأدوية</span><span class="toc-dots"></span><span class="toc-pagenum"></span></a></div></div></div>
 
 <div class="section-page"><div class="sp-cell"><div class="sp-label">القسم الأول</div><div class="sp-title">المتطلبات الأساسية</div><div class="sp-bar" style="background:#3C6B8A"></div></div></div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">01</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 01</div><div class="ch-title">المصطلحات الطبية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-01" style="background:#3C6B8A"><div class="ch-bgnum ltr">01</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 01</div><div class="ch-title">المصطلحات الطبية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: المصطلحات الطبية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-002</div></div></div>
 <blockquote><strong>لماذا هذا الملف أول شيء؟</strong></blockquote>
 <blockquote>لأن المصطلح الطبي ليس كلمة عشوائية — هو جملة مضغوطة. من يفهم البنية يفهم المعنى تلقائياً حتى لو رأى الكلمة للمرة الأولى.</blockquote>
 <hr/>
@@ -536,8 +650,8 @@ hr { border: none; border-top: 1px solid #E0D5C5; margin: 10px 0; }
 <tr><td><code class="ltr-inline">-<span class="ltr">pam / -lam</span></code></td><td>بنزوديازيبين</td></tr>
 </tbody></table>
 <div class="ch-footer">القسم الأول — المصطلحات الطبية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">02</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 02</div><div class="ch-title">تصنيفات الأدوية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-02" style="background:#3C6B8A"><div class="ch-bgnum ltr">02</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 02</div><div class="ch-title">تصنيفات الأدوية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: تصنيفات الأدوية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-003</div></div></div>
 <blockquote><strong>لماذا يهمك هذا؟</strong></blockquote>
 <blockquote>لأن كل يوم في الصيدلية ستتعامل مع مئات الأدوية. بدون تصنيف واضح في ذهنك، ستغرق. بوجوده، كل دواء جديد تراه يجد مكانه تلقائياً.</blockquote>
 <hr/>
@@ -667,8 +781,8 @@ A10BA02 → Metformin ✓</code></pre>
 <h2 class="prereq">ملخص — ماذا تحفظ من هذا الملف؟</h2>
 <ol><li><strong>رموز <span class="ltr">ATC</span> الأولى</strong> — <span class="ltr">A</span>, <span class="ltr">B</span>, <span class="ltr">C</span>, <span class="ltr">D</span>, <span class="ltr">G</span>, <span class="ltr">H</span>, <span class="ltr">J</span>, <span class="ltr">L</span>, <span class="ltr">M</span>, <span class="ltr">N</span>, <span class="ltr">R</span>, <span class="ltr">S</span></li><li><strong>اللواحق الدوائية</strong> (من <span class="ltr">prereq_01)</span> تكمل نظام <span class="ltr">ATC</span> — معاً يحددان الفئة</li><li><strong>فئات الحمل</strong> <span class="ltr">A/B</span> آمن، <span class="ltr">D/X</span> ممنوع</li><li><strong>الجداول الدوائية</strong> — جدول <span class="ltr">II</span> و <span class="ltr">IV</span> الأهم في الصيدلية اليومية</li></ol>
 <div class="ch-footer">القسم الأول — تصنيفات الأدوية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">03</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 03</div><div class="ch-title">المضادات الحيوية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-03" style="background:#3C6B8A"><div class="ch-bgnum ltr">03</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 03</div><div class="ch-title">المضادات الحيوية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: المضادات الحيوية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-004</div></div></div>
 <blockquote><strong>ملاحظة مهمة قبل القراءة:</strong></blockquote>
 <blockquote>المضادات الحيوية هي الأكثر وصفاً والأكثر سوء استخدام في العالم. فهمها جيداً يجعلك فنياً صيدلانياً حقيقياً، لا مجرد موزع أدوية.</blockquote>
 <hr/>
@@ -854,8 +968,8 @@ A10BA02 → Metformin ✓</code></pre>
 <tr><td>ميترونيدازول</td><td>—</td><td><span class="ltr">DNA</span></td><td>للاهوائيات والطفيليات</td></tr>
 </tbody></table>
 <div class="ch-footer">القسم الأول — المضادات الحيوية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">04</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 04</div><div class="ch-title">المسكنات ومضادات الالتهاب</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-04" style="background:#3C6B8A"><div class="ch-bgnum ltr">04</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 04</div><div class="ch-title">المسكنات ومضادات الالتهاب</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: المسكنات ومضادات الالتهاب ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-005</div></div></div>
 <blockquote>الألم أكثر شكوى يواجهها فني الصيدلية. معرفة الفرق بين مسكن وآخر — ومتى تحيل المريض للطبيب — هي أحد أهم مهاراتك.</blockquote>
 <hr/>
 <h2 class="prereq">1. السلّم التصاعدي للألم (<span class="ltr">WHO Pain Ladder)</span></h2>
@@ -1013,8 +1127,8 @@ COX-2 → مسؤولة عن الالتهاب بشكل رئيسي</code></pre>
 <tr><td>يحتاج وصفة</td><td>لا (معظم الدول)</td><td>بعضها</td><td>نعم دائماً</td></tr>
 </tbody></table>
 <div class="ch-footer">القسم الأول — المسكنات ومضادات الالتهاب &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">05</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 05</div><div class="ch-title">أدوية القلب والأوعية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-05" style="background:#3C6B8A"><div class="ch-bgnum ltr">05</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 05</div><div class="ch-title">أدوية القلب والأوعية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: أدوية القلب والأوعية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-006</div></div></div>
 <blockquote>القلب والضغط معاً يمثلان أكثر من 30% من الأدوية المصروفة في الصيدليات. الطريق لهما واضح — فهم طبقة طبقة.</blockquote>
 <hr/>
 <h2 class="prereq">1. ضغط الدم — الأرقام التي يجب حفظها</h2>
@@ -1200,8 +1314,8 @@ COX-2 → مسؤولة عن الالتهاب بشكل رئيسي</code></pre>
 <tr><td><code class="ltr-inline">-<span class="ltr">thiazide</span></code></td><td>ثيازيد مدر</td></tr>
 </tbody></table>
 <div class="ch-footer">القسم الأول — أدوية القلب والأوعية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">06</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 06</div><div class="ch-title">الأشكال الصيدلانية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-06" style="background:#3C6B8A"><div class="ch-bgnum ltr">06</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 06</div><div class="ch-title">الأشكال الصيدلانية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الأشكال الصيدلانية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-007</div></div></div>
 <blockquote>الدواء الواحد قد يأتي في 5 أشكال مختلفة. لكل شكل سبب — معدل امتصاص، سهولة بلع، سرعة تأثير. هذا الملف يربط الشكل بالمنطق.</blockquote>
 <hr/>
 <h2 class="prereq">1. الأشكال الصلبة (<span class="ltr">Solid Dosage Forms)</span></h2>
@@ -1327,8 +1441,8 @@ COX-2 → مسؤولة عن الالتهاب بشكل رئيسي</code></pre>
 <tr><td>لبوس</td><td>يتجاوز المعدة</td><td>غير مريح، امتصاص متغير</td></tr>
 </tbody></table>
 <div class="ch-footer">القسم الأول — الأشكال الصيدلانية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">07</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 07</div><div class="ch-title">قراءة الوصفة الطبية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-07" style="background:#3C6B8A"><div class="ch-bgnum ltr">07</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 07</div><div class="ch-title">قراءة الوصفة الطبية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: قراءة الوصفة الطبية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-008</div></div></div>
 <blockquote>الوصفة الطبية هي الوثيقة القانونية التي تعمل بها كل يوم. قراءتها بشكل صحيح ليست مهارة — هي <strong>واجب مهني</strong>.</blockquote>
 <hr/>
 <h2 class="prereq">1. مكوّنات الوصفة الطبية الكاملة</h2>
@@ -1547,8 +1661,8 @@ PRN = عند الحاجة        STAT = فوراً
 PO = فموي               IV = وريدي        IM = عضلي       SC = تحت الجلد
 OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</code></pre>
 <div class="ch-footer">القسم الأول — قراءة الوصفة الطبية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#3C6B8A"><div class="ch-bgnum ltr">08</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 08</div><div class="ch-title">أسماء الأدوية الشائعة</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-prereqs-08" style="background:#3C6B8A"><div class="ch-bgnum ltr">08</div><div class="ch-inner"><div class="ch-label">القسم الأول — الفصل 08</div><div class="ch-title">أسماء الأدوية الشائعة</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: أسماء الأدوية الشائعة ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-009</div></div></div>
 <blockquote><strong>القاعدة:</strong> الاسم الجنيسي هو هويتك المهنية. الاسم التجاري هو ما يعرفه المريض. أنت بحاجة لكليهما.</blockquote>
 <hr/>
 <h2 class="prereq">1. الفرق بين الجنيسي والتجاري</h2>
@@ -1824,8 +1938,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 </tbody></table>
 <div class="ch-footer">القسم الأول — أسماء الأدوية الشائعة &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
 <div class="section-page"><div class="sp-cell"><div class="sp-label">القسم الثاني</div><div class="sp-title">المحتوى الرئيسي — السيناريوهات</div><div class="sp-bar" style="background:#C1724A"></div></div></div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">01</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 01</div><div class="ch-title">الجهاز العصبي والألم</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-01" style="background:#C1724A"><div class="ch-bgnum ltr">01</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 01</div><div class="ch-title">الجهاز العصبي والألم</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الجهاز العصبي والألم ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-010</div></div></div>
 <blockquote><strong>تذكر دايماً:</strong> الألم مش تشخيص — هو عرض. شغلتك تفهم مصدره وتقدّر تساعد أو تحوّل.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — الصداع</div><div class="td-line"></div></div></div>
@@ -1990,8 +2104,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>الألم اللي بيصحي الإنسان من النوم أو اللي مش بيتحسن بالمسكن = طبيب.</blockquote>
 <blockquote>الألم العصبي مش بيتعالج بمسكنات عادية.</blockquote>
 <div class="ch-footer">القسم الثاني — الجهاز العصبي والألم &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">02</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 02</div><div class="ch-title">القلب والأوعية الدموية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-02" style="background:#C1724A"><div class="ch-bgnum ltr">02</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 02</div><div class="ch-title">القلب والأوعية الدموية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: القلب والأوعية الدموية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-011</div></div></div>
 <blockquote><strong>تذكر:</strong> أمراض القلب والضغط هي الأكثر شيوعاً في مصر. مريض الضغط والكوليسترول بيجي الصيدلية كل شهر. لازم تعرف تتعامل معاه كمتخصص.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — ضغط الدم المرتفع</div><div class="td-line"></div></div></div>
@@ -2101,8 +2215,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>أي ألم صدر مع تعرق وانتشار = إسعاف قبل أي دواء.</blockquote>
 <blockquote>الوارفارين والكلوبيدوجريل + <span class="ltr">NSAIDs =</span> تركيبة قاتلة.</blockquote>
 <div class="ch-footer">القسم الثاني — القلب والأوعية الدموية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">03</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 03</div><div class="ch-title">الأمراض المزمنة والأيضية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-03" style="background:#C1724A"><div class="ch-bgnum ltr">03</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 03</div><div class="ch-title">الأمراض المزمنة والأيضية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الأمراض المزمنة والأيضية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-012</div></div></div>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — السكري في الصيدلية</div><div class="td-line"></div></div></div>
 <hr/>
@@ -2238,8 +2352,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>مريض الأنسولين دايماً لازم معاه سكر سريع في جيبه.</blockquote>
 <blockquote>الثيروكسين على معدة فاضية — ساعة قبل أي حاجة.</blockquote>
 <div class="ch-footer">القسم الثاني — الأمراض المزمنة والأيضية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">04</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 04</div><div class="ch-title">الجهاز التنفسي والحساسية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-04" style="background:#C1724A"><div class="ch-bgnum ltr">04</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 04</div><div class="ch-title">الجهاز التنفسي والحساسية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الجهاز التنفسي والحساسية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-013</div></div></div>
 <blockquote><strong>طريقة القراءة:</strong> كل حالة فيها شكوى المريض، الأسئلة اللي لازم تسألها، التوصية، وعلامات الخطر. احفظ المنطق — مش الإجابة.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — الكحة (السعال)</div><div class="td-line"></div></div></div>
@@ -2436,8 +2550,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>الجسم يعالج نفسه في 7-10 أيام.</blockquote>
 <blockquote>شغلتك هي إراحة الأعراض ورصد علامات الخطر.</blockquote>
 <div class="ch-footer">القسم الثاني — الجهاز التنفسي والحساسية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">05</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 05</div><div class="ch-title">العيون والأذن والأنف</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-05" style="background:#C1724A"><div class="ch-bgnum ltr">05</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 05</div><div class="ch-title">العيون والأذن والأنف</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: العيون والأذن والأنف ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-014</div></div></div>
 <blockquote><strong>تذكر:</strong> معظم حالات <span class="ltr">ENT</span> والعيون اللي بتيجي للصيدلية خفيفة وقابلة للعلاج. لكن فيه علامات خطر تميّزها عن غيرها بسرعة.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — العيون</div><div class="td-line"></div></div></div>
@@ -2605,8 +2719,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>التهاب الأذن الوسطى عند الأطفال = طبيب، مش قطرة.</blockquote>
 <blockquote>غسيل الأنف بالملح أفضل وأرخص من معظم البخاخات.</blockquote>
 <div class="ch-footer">القسم الثاني — العيون والأذن والأنف &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">06</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 06</div><div class="ch-title">الجهاز الهضمي والكبد</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-06" style="background:#C1724A"><div class="ch-bgnum ltr">06</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 06</div><div class="ch-title">الجهاز الهضمي والكبد</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الجهاز الهضمي والكبد ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-015</div></div></div>
 <blockquote><strong>ملاحظة:</strong> شكاوى الجهاز الهضمي هي الأكثر تكراراً في الصيدليات المصرية يومياً. 80% منها بتتعالج بدون وصفة، 20% محتاجة تحويل.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — الحموضة والارتجاع</div><div class="td-line"></div></div></div>
@@ -2779,8 +2893,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>أي دم في البراز أو القيء = طوارئ.</blockquote>
 <blockquote>الإمساك المزمن الجديد فوق 50 سنة = طبيب.</blockquote>
 <div class="ch-footer">القسم الثاني — الجهاز الهضمي والكبد &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">07</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 07</div><div class="ch-title">المضادات الميكروبية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-07" style="background:#C1724A"><div class="ch-bgnum ltr">07</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 07</div><div class="ch-title">المضادات الميكروبية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: المضادات الميكروبية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-016</div></div></div>
 <blockquote><strong>هذا الفصل مختلف عن <span class="ltr">prereq_03:</span></strong> في الـ <span class="ltr">prereq</span> اتعلمت العلم — هنا تتعلم القرار. متى تصرف؟ متى ترفض؟ متى تحوّل؟ وكيف تشرح للمريض؟</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — قرارات الصرف</div><div class="td-line"></div></div></div>
@@ -2976,8 +3090,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>مريض سبق أخد المضاد كتير = احتمال مقاومة.</blockquote>
 <blockquote>التهاب البول في الرجل دايماً يحتاج طبيب.</blockquote>
 <div class="ch-footer">القسم الثاني — المضادات الميكروبية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">08</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 08</div><div class="ch-title">الأدوية الحيوية والحقن</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-08" style="background:#C1724A"><div class="ch-bgnum ltr">08</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 08</div><div class="ch-title">الأدوية الحيوية والحقن</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الأدوية الحيوية والحقن ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-017</div></div></div>
 <blockquote><strong>تذكر:</strong> في الصيدلية مش بتعطي الحقن أنت — لكن بتصرفها وبتشرح للمريض كيفية الاستخدام والتخزين. الفهم الغلط في الحقن = علاج غلط.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — الأنسولين</div><div class="td-line"></div></div></div>
@@ -3166,8 +3280,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>اللقاحات في الثلاجة — لا تُجمَّد ولا تُعرَّض للحرارة.</blockquote>
 <blockquote>أي حقن <span class="ltr">IV</span> تتم في المستشفى — مش في الصيدلية.</blockquote>
 <div class="ch-footer">القسم الثاني — الأدوية الحيوية والحقن &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">09</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 09</div><div class="ch-title">الجلد والعناية الموضعية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-09" style="background:#C1724A"><div class="ch-bgnum ltr">09</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 09</div><div class="ch-title">الجلد والعناية الموضعية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الجلد والعناية الموضعية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-018</div></div></div>
 <blockquote><strong>الجلد هو الأكثر وضوحاً</strong> — المريض بيجيلك يعرفك شوف وتشخّص. لازم تعرف تميّز اللي بتصرف له من اللي بتحوّله لطبيب جلدية.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — الفطريات الجلدية</div><div class="td-line"></div></div></div>
@@ -3343,8 +3457,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>أي طفح مصحوب بحمى وانتشار = طبيب.</blockquote>
 <blockquote>الترطيب هو أساس علاج الجلد الجاف والأكزيما.</blockquote>
 <div class="ch-footer">القسم الثاني — الجلد والعناية الموضعية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">10</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 10</div><div class="ch-title">الفيتامينات والمكملات</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-10" style="background:#C1724A"><div class="ch-bgnum ltr">10</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 10</div><div class="ch-title">الفيتامينات والمكملات</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الفيتامينات والمكملات ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-019</div></div></div>
 <blockquote><strong>تذكر:</strong> المكملات مش أدوية — لكنها مش بلا تأثير. الجرعة الزائدة منها بتضر، والنقص الحقيقي منها بيسبب أمراض. شغلتك تفرق بين اللي يحتاجه المريض فعلاً واللي بيتباع على الموضة.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — فيتامين <span class="ltr">D</span></div><div class="td-line"></div></div></div>
@@ -3611,8 +3725,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>الجرعة الزائدة من المكملات الدهنية (<span class="ltr">D</span>، <span class="ltr">A</span>، <span class="ltr">E</span>، <span class="ltr">K)</span> تتراكم وتضر.</blockquote>
 <blockquote>البروبيوتيك بعد المضاد بساعتين — مش معه.</blockquote>
 <div class="ch-footer">القسم الثاني — الفيتامينات والمكملات &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">11</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 11</div><div class="ch-title">صحة المرأة والأطفال</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-11" style="background:#C1724A"><div class="ch-bgnum ltr">11</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 11</div><div class="ch-title">صحة المرأة والأطفال</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: صحة المرأة والأطفال ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-020</div></div></div>
 <blockquote><strong>تذكر:</strong> المرأة والطفل مش "بالغ صغير" — لهم فسيولوجيا مختلفة وأدوية مختلفة وحسابات مختلفة. الخطأ هنا أثره ضعف.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">الموضوع الأول — تنظيم الحمل</div><div class="td-line"></div></div></div>
@@ -3881,8 +3995,8 @@ OD = العين اليمنى       OS = اليسرى       OU = كلتيهما</
 <blockquote>جرعة الطفل دايماً بالوزن — مش بالعمر.</blockquote>
 <blockquote>حبوب الطوارئ: كل ساعة بتقلل الفعالية — ابدأ فوراً.</blockquote>
 <div class="ch-footer">القسم الثاني — صحة المرأة والأطفال &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#C1724A"><div class="ch-bgnum ltr">12</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 12</div><div class="ch-title">الإسعافات الأولية والطوارئ</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-chapters-12" style="background:#C1724A"><div class="ch-bgnum ltr">12</div><div class="ch-inner"><div class="ch-label">القسم الثاني — الفصل 12</div><div class="ch-title">الإسعافات الأولية والطوارئ</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الإسعافات الأولية والطوارئ ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-021</div></div></div>
 <blockquote><strong>هذا الفصل الأهم عملياً:</strong> معظم الكتاب عن صرف الأدوية بشكل صحيح — لكن هنا بتتعلم كيف تنقذ حياة. الصيدلية هي أول نقطة تماس للكثير من حالات الطوارئ في مصر.</blockquote>
 <hr/>
 <div class="topic-divider"><div class="td-row"><div class="td-label">المبدأ الأساسي — ترتيب الأولويات</div><div class="td-line"></div></div></div>
@@ -4124,8 +4238,8 @@ T — Time (الوقت): لو علامة واحدة موجودة → اتصل ب
 <blockquote><span class="ltr">CPR</span> بدون أنفاس (ضغطات فقط) أحسن من لا شيء.</blockquote>
 <div class="ch-footer">القسم الثاني — الإسعافات الأولية والطوارئ &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
 <div class="section-page"><div class="sp-cell"><div class="sp-label">القسم الثالث</div><div class="sp-title">الأقسام الإضافية</div><div class="sp-bar" style="background:#5A7A3E"></div></div></div>
-<div class="chapter-header" style="background:#5A7A3E"><div class="ch-bgnum ltr">01</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 01</div><div class="ch-title">التفاعلات الدوائية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-extra-01" style="background:#5A7A3E"><div class="ch-bgnum ltr">01</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 01</div><div class="ch-title">التفاعلات الدوائية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: التفاعلات الدوائية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-022</div></div></div>
 <blockquote><strong>هذا القسم قد ينقذ حياة.</strong> التفاعلات الدوائية مسؤولة عن 5-10% من دخول المستشفيات في مصر — ومعظمها كان يمكن تجنبه لو فيه فني صيدلاني واعي وقف وسأل.</blockquote>
 <hr/>
 <h2 class="extra">أولاً — أنواع التفاعلات</h2>
@@ -4307,8 +4421,8 @@ T — Time (الوقت): لو علامة واحدة موجودة → اتصل ب
 <blockquote>الوارفارين والديجوكسين والليثيوم ومضادات الصرع = أدوية هامش ضيق.</blockquote>
 <blockquote>أي تفاعل مش متأكد منه: استشر التطبيقات المتخصصة (<span class="ltr">Medscape Interactions</span>, <span class="ltr">Drugs.com)</span>.</blockquote>
 <div class="ch-footer">القسم الثالث — التفاعلات الدوائية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#5A7A3E"><div class="ch-bgnum ltr">02</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 02</div><div class="ch-title">قراءة نتائج التحاليل</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-extra-02" style="background:#5A7A3E"><div class="ch-bgnum ltr">02</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 02</div><div class="ch-title">قراءة نتائج التحاليل</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: قراءة نتائج التحاليل ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-023</div></div></div>
 <blockquote>المريض بييجيلك بورقة تحاليل ويسألك "دي تمام؟" — ده موقف يومي. لازم تعرف تقرأ الأرقام وتوضح للمريض، وتعرف امتى ترسله للطبيب فوراً.</blockquote>
 <hr/>
 <h2 class="extra">الموضوع الأول — صورة الدم الكاملة (<span class="ltr">CBC)</span></h2>
@@ -4485,8 +4599,8 @@ T — Time (الوقت): لو علامة واحدة موجودة → اتصل ب
 <blockquote>أي قيمة خارج المدى المكتوب في الورقة: يراجع طبيبه.</blockquote>
 <blockquote>أرقام الطوارئ في الجدول أعلاه = روح المستشفى فوراً.</blockquote>
 <div class="ch-footer">القسم الثالث — قراءة نتائج التحاليل &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#5A7A3E"><div class="ch-bgnum ltr">03</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 03</div><div class="ch-title">التخزين وإدارة المخزون</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-extra-03" style="background:#5A7A3E"><div class="ch-bgnum ltr">03</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 03</div><div class="ch-title">التخزين وإدارة المخزون</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: التخزين وإدارة المخزون ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-024</div></div></div>
 <blockquote>دواء صح بتخزين غلط = دواء فاسد. المريض بيأخد حاجة مش فاعلة أو حتى ضارة وهو مش عارف.</blockquote>
 <hr/>
 <h2 class="extra">الموضوع الأول — درجات الحرارة والتخزين</h2>
@@ -4613,8 +4727,8 @@ T — Time (الوقت): لو علامة واحدة موجودة → اتصل ب
 <blockquote>28 يوم = الحد الأقصى لمعظم قطرات العين.</blockquote>
 <blockquote>الأنسولين المتغير اللون أو العكر = لا تحقنه.</blockquote>
 <div class="ch-footer">القسم الثالث — التخزين وإدارة المخزون &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#5A7A3E"><div class="ch-bgnum ltr">04</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 04</div><div class="ch-title">المريض المسن في الصيدلية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-extra-04" style="background:#5A7A3E"><div class="ch-bgnum ltr">04</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 04</div><div class="ch-title">المريض المسن في الصيدلية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: المريض المسن في الصيدلية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-025</div></div></div>
 <blockquote>المسن مش بالغ كبير السن فقط. جسمه يعمل بشكل مختلف، كليته وكبده أبطأ، وهو في الغالب بياخد 5 أدوية أو أكثر. كل قرار صرف هنا يتضاعف خطره.</blockquote>
 <hr/>
 <h2 class="extra">أولاً — لماذا المسن مختلف فسيولوجياً؟</h2>
@@ -4737,8 +4851,8 @@ T — Time (الوقت): لو علامة واحدة موجودة → اتصل ب
 <blockquote>السقوط في المسن = كسر = سرير = مضاعفات = وفاة في بعض الحالات.</blockquote>
 <blockquote>ابدأ بنص الجرعة دائماً.</blockquote>
 <div class="ch-footer">القسم الثالث — المريض المسن في الصيدلية &nbsp;&middot;&nbsp; BetterDiagnosis الإصدار 0.1</div>
-<div class="chapter-header" style="background:#5A7A3E"><div class="ch-bgnum ltr">05</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 05</div><div class="ch-title">الصيام والأدوية</div></div></div>
-<div class="visual-placeholder"><div class="vp-cell"><div class="vp-label">[ صورة توضيحية للفصل ]</div><div class="vp-sub">تُضاف لاحقاً</div></div></div>
+<div class="chapter-header" id="ch-extra-05" style="background:#5A7A3E"><div class="ch-bgnum ltr">05</div><div class="ch-inner"><div class="ch-label">القسم الثالث — الفصل 05</div><div class="ch-title">الصيام والأدوية</div></div></div>
+<div class="visual-placeholder" style="aspect-ratio:16/9; min-height:140px"><div class="vp-cell"><div class="vp-label">[ صورة غلاف توضيحية لفصل: الصيام والأدوية ]</div><div class="vp-sub">نسبة الأبعاد المقترحة: 16:9 &nbsp;·&nbsp; تُضاف لاحقاً</div><div class="vp-marker">IMGSLOT-026</div></div></div>
 <blockquote>رمضان في مصر = 30 مليون سؤال في الصيدليات. المريض المزمن خايف يصوم وخايف يفطر. شغلتك إنك تعرف الإجابة.</blockquote>
 <hr/>
 <h2 class="extra">أولاً — المبدأ الأساسي</h2>
