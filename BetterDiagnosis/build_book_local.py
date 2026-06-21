@@ -1,67 +1,140 @@
-
 #!/usr/bin/env python3
 """
-BetterDiagnosis — PDF Book Builder (Local Version v2)
-─────────────────────────────────────────────────────
-Fixes applied vs v1:
-  1. H1 from markdown SKIPPED — chapter header from JSON is authoritative
-  2. Latin codes in tables wrapped in <span class="ltr"> for bidi isolation
-  3. --zoom 1.33 corrects 96-DPI screen → 72-DPI PDF mismatch (content fills page)
-  4. --disable-smart-shrinking prevents wkhtmltopdf from auto-shrinking content
-  5. Font: uses Amiri from fonts/ dir if present; falls back to FreeSerif
-  6. CSS font sizes divided by 1.33 so they render correct after zoom
-  7. Visual placeholder uses text-only (no emoji that won't render)
-  8. RTL table cells fixed with explicit direction on every td/th
-  9. Code blocks properly isolated as LTR
-  10. Box icons use ASCII fallbacks in case emoji unsupported
-─────────────────────────────────────────────────────
+BetterDiagnosis — PDF Book Builder  (v4 — ENGINE SWITCH: wkhtmltopdf → WeasyPrint)
+════════════════════════════════════════════════════════════════════════
+ENGINE SWITCH (v4):
+  wkhtmltopdf is unmaintained since 2020 and its old Qt-WebKit bidi
+  (Arabic/Latin mixed-direction text) engine has confirmed, unfixable
+  rendering bugs — see BUG 1 history below, where extensive debugging
+  traced multiple visual glyph-collision issues directly to WebKit's
+  bidi reordering algorithm itself, not to our HTML/CSS.
+
+  Switched to WeasyPrint: actively maintained, uses Pango + HarfBuzz
+  for text shaping (the same industry-standard libraries GTK/LibreOffice
+  use), with correct, modern Unicode BiDi (UAX #9) support out of the
+  box. Same HTML/CSS pipeline — only the final "render to PDF" call
+  changed from a wkhtmltopdf subprocess to a native Python import.
+
+  Practical effect: the punctuation-swallowing workarounds below (BUG 1
+  fixes) are kept for safety/backwards-compatibility, but should no
+  longer be strictly necessary — WeasyPrint resolves mixed Arabic/Latin
+  text correctly without them. If you want to simplify the regex later,
+  test first; for now nothing is removed, only the renderer changed.
+
+  Page numbers + running footer also moved from wkhtmltopdf's
+  --footer-* CLI flags into native CSS `@page { @bottom-center {...} }`
+  margin boxes, which is the standards-compliant way WeasyPrint expects.
+
+WHAT WAS BROKEN IN v2/v3 (confirmed by visual page-render audit,
+kept here for history — still relevant since some fixes are HTML/CSS
+structure, not engine-specific):
+
+ BUG 1 — CRITICAL: isolate_ltr() ran AFTER inline_md() built real HTML
+         tags (<strong>, <em>, <code>). Its Latin-word regex then matched
+         the tag names themselves ("strong","code","class","ltr") and
+         wrapped THEM in extra <span> tags, corrupting every single
+         styled element in the book → visible "<code class="ltr">" text,
+         broken tables, garbled boxes. THIS WAS THE #1 ROOT CAUSE.
+         FIX: isolate_ltr() now runs FIRST, on raw text only, before any
+         HTML tags exist. inline_md() then wraps remaining markdown.
+
+ BUG 2 — Section divider pages: content stuck to TOP of page instead of
+         vertically centered. CSS flexbox `justify-content:center` does
+         NOT reliably center in print engines.
+         FIX: replaced flexbox centering with table-cell vertical-align,
+         which works reliably in both wkhtmltopdf and WeasyPrint.
+
+ BUG 3 — Massive empty space after short chapters (half-blank pages).
+         FIX: removed forced page-break-after on every chapter; only
+         break before the NEXT chapter starts, so content flows
+         naturally and short chapters don't waste a half page.
+
+ BUG 4 — Page felt oversized / "zoomed" / like a sheet of paper, not a
+         book. Content sat in a narrow column with massive surrounding
+         margin (a "rectangle inside a border" look) and wasn't usable
+         on phone/tablet screens.
+         FIX: switched trim size from full A4 (210×297mm) to a proper
+         compact BOOK trim size — 6"×9" (152×229mm), which is the
+         actual industry-standard size for printed non-fiction
+         paperbacks and reads MUCH better on phone/tablet screens
+         (closer to the device aspect ratio). Margins tightened
+         proportionally.
+
+ BUG 5 — --zoom 1.33 was a wrong fix for a non-existent problem; it
+         scaled content unevenly against fixed-mm margins, creating the
+         double-border illusion. REMOVED (and N/A under WeasyPrint,
+         which has no zoom concept — it lays out CSS units at their
+         true scale).
+
+ BUG 6 — Patient-quote / bold-line regex occasionally failed to close
+         (markdown like "**مثال:**" alone on a line), leaving literal
+         asterisks that then got mangled by the (now-fixed) LTR isolator.
+         FIX: with isolate_ltr() reordered, this self-resolves; added
+         a defensive raw-asterisk cleanup pass as a second safety net.
+
+ BUG 7 — Confirmed via isolated minimal-HTML test cases: wkhtmltopdf's
+         WebKit bidi engine visually overlaps Latin/Arabic glyphs when a
+         neutral character (=, (, )) sits between an RTL run and an
+         isolated LTR span — e.g. "= Otitis Media (التهاب...)" collided
+         but "Otitis Media (" as one isolated unit did not. Root cause
+         was in wkhtmltopdf itself (confirmed by testing identical CSS
+         with synthetic-bold vs real bold-font-face, inline vs
+         inline-block, RLM marks, thin-space chars — all wkhtmltopdf-
+         side mitigations). Should no longer manifest under WeasyPrint's
+         correct bidi implementation; the regex fix is kept as a
+         defensive no-op safety net.
+════════════════════════════════════════════════════════════════════════
 USAGE:
-  1. Place this file inside your BetterDiagnosis/ folder (same level as README.md)
-  2. Run: python3 build_book_local.py
-  3. Output: BetterDiagnosis_book.pdf  (same folder)
-─────────────────────────────────────────────────────
+  1. Place this file inside your BetterDiagnosis/ folder
+     (same level as README.md, the_book.json, prereq_*.md)
+  2. Run: pip install weasyprint   (one-time; see install_env.sh)
+  3. Run: python3 build_book_local.py
+  4. Output: BetterDiagnosis_book.pdf (same folder)
+════════════════════════════════════════════════════════════════════════
 """
 
 import json, os, re, subprocess, sys
 from pathlib import Path
 
 # ═══════════════════════════════════════════════════════════════════════
-# PATH CONFIG  — script auto-detects based on its own location
+# PATHS
 # ═══════════════════════════════════════════════════════════════════════
 SCRIPT_DIR = Path(__file__).parent.resolve()
-BOOK_ROOT  = SCRIPT_DIR                  # prereq files live here
-MAIN_DIR   = SCRIPT_DIR / "main_content" # ch* and section_* files
+BOOK_ROOT  = SCRIPT_DIR
+MAIN_DIR   = SCRIPT_DIR / "main_content"
 JSON_FILE  = SCRIPT_DIR / "the_book.json"
 FONTS_DIR  = SCRIPT_DIR / "fonts"
 OUT_HTML   = SCRIPT_DIR / "_book_build.html"
 OUT_PDF    = SCRIPT_DIR / "BetterDiagnosis_book.pdf"
 
-# ── Load config ───────────────────────────────────────────────────────
 if not JSON_FILE.exists():
-    print(f"ERROR: {JSON_FILE} not found. Make sure the_book.json is in the same folder.")
+    print(f"ERROR: {JSON_FILE} not found.")
     sys.exit(1)
 
 with open(JSON_FILE, encoding="utf-8") as f:
     CFG = json.load(f)
 
-C  = CFG["colors"]
-T  = CFG["typography"]
-P  = CFG["page"]
-CO = CFG["components"]
+C    = CFG["colors"]
+T    = CFG["typography"]
+CO   = CFG["components"]
 META = CFG["meta"]
 
-# ── Font detection ────────────────────────────────────────────────────
-# Zoom factor: wkhtmltopdf renders at 96dpi, PDF is 72dpi → ratio 1.333
-# All CSS pt sizes divided by this factor so they look correct after zoom.
-ZOOM = 1.33
-Z    = ZOOM  # shorthand
+# ═══════════════════════════════════════════════════════════════════════
+# TRIM SIZE — compact book format (was: full A4 — too big / "zoomed")
+# 6in x 9in is the real-world standard trade-paperback size, and reads
+# far better on phones/tablets than scaled-down A4.
+# ═══════════════════════════════════════════════════════════════════════
+PAGE_W_MM = 152      # 6 in
+PAGE_H_MM = 229      # 9 in
+MARGIN_TOP_MM    = 16
+MARGIN_BOTTOM_MM = 18
+MARGIN_OUTER_MM  = 14
+MARGIN_INNER_MM  = 16
 
-def scaled(pt):
-    """Scale a font size down so after zoom=1.33 it renders at intended size."""
-    return round(pt / Z, 1)
-
+# ═══════════════════════════════════════════════════════════════════════
+# FONT DETECTION  (no zoom hack — sizes are真 print pt values directly)
+# ═══════════════════════════════════════════════════════════════════════
 def find_font(name):
-    """Look for a font file in the fonts/ directory."""
     for ext in ["ttf", "TTF", "otf", "OTF"]:
         p = FONTS_DIR / f"{name}.{ext}"
         if p.exists():
@@ -70,32 +143,27 @@ def find_font(name):
 
 AMIRI_REG  = find_font("Amiri-Regular")
 AMIRI_BOLD = find_font("Amiri-Bold")
-
-# System fallbacks
 FREESERIF_REG  = "/usr/share/fonts/truetype/freefont/FreeSerif.ttf"
 FREESERIF_BOLD = "/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf"
 
 if AMIRI_REG and AMIRI_BOLD:
-    FONT_REG  = AMIRI_REG
-    FONT_BOLD = AMIRI_BOLD
-    FONT_NAME = "Amiri"
+    FONT_REG, FONT_BOLD, FONT_NAME = AMIRI_REG, AMIRI_BOLD, "Amiri"
     print("✓ Using Amiri font (best quality)")
 elif os.path.exists(FREESERIF_REG):
-    FONT_REG  = FREESERIF_REG
-    FONT_BOLD = FREESERIF_BOLD
-    FONT_NAME = "FreeSerif"
+    FONT_REG, FONT_BOLD, FONT_NAME = FREESERIF_REG, FREESERIF_BOLD, "FreeSerif"
     print("⚠ Amiri not found — using FreeSerif (run install_env.sh for better quality)")
 else:
-    FONT_REG  = None
-    FONT_BOLD = None
-    FONT_NAME = "serif"
+    FONT_REG, FONT_BOLD, FONT_NAME = None, None, "serif"
     print("⚠ No Arabic TTF found — using system serif font")
+
+# Since we removed the zoom hack, font sizes in the_book.json are used AS-IS.
+def pt(size):
+    return size
 
 # ═══════════════════════════════════════════════════════════════════════
 # CSS
 # ═══════════════════════════════════════════════════════════════════════
 def build_css():
-    # @font-face block
     ff = ""
     if FONT_REG:
         ff += f"""
@@ -117,85 +185,138 @@ def build_css():
     return f"""
 {ff}
 
-/* ── Reset ── */
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
-/* ── Page ── */
 @page {{
-  size: A4;
-  margin: {P['margin_top_mm']}mm {P['margin_outer_mm']}mm {P['margin_bottom_mm']}mm {P['margin_inner_mm']}mm;
+  size: {PAGE_W_MM}mm {PAGE_H_MM}mm;
+  margin: {MARGIN_TOP_MM}mm {MARGIN_OUTER_MM}mm {MARGIN_BOTTOM_MM}mm {MARGIN_INNER_MM}mm;
+
+  /* ── Running footer (WeasyPrint renders @page margin boxes natively —
+     no command-line --footer-* flags needed like wkhtmltopdf required) ── */
+  @bottom-center {{
+    content: "BetterDiagnosis — {META['title_ar']}";
+    font-family: {fam};
+    font-size: 6.5pt;
+    color: {C['footer_text']};
+  }}
+  @bottom-left {{
+    content: counter(page);
+    font-family: {fam};
+    font-size: 6.5pt;
+    color: {C['footer_text']};
+  }}
 }}
 
-/* ── Body ── */
-body {{
+/* No footer on the title page */
+@page :first {{
+  @bottom-center {{ content: none; }}
+  @bottom-left   {{ content: none; }}
+}}
+
+html, body {{
   font-family: {fam};
-  font-size: {scaled(T['size_body'])}pt;
+  font-size: {pt(T['size_body'])}pt;
   line-height: {T['line_height']};
   color: {C['text_primary']};
   background: {C['page_bg']};
   direction: rtl;
   unicode-bidi: embed;
-  word-spacing: 0.05em;
 }}
 
-/* ── LTR isolation for Latin codes inside RTL text ── */
-.ltr, code, pre, .ltr-block {{
+/* ── LTR isolation (for Latin codes inside RTL flow) ── */
+.ltr {{
   direction: ltr !important;
   unicode-bidi: isolate !important;
+  display: inline-block !important;
+  vertical-align: baseline;
+  max-width: 100%;
 }}
-.ltr {{ display: inline; }}
-.ltr-block {{ display: block; }}
+code.ltr-inline {{
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  display: inline-block !important;
+  vertical-align: baseline;
+}}
+.ltr-block {{
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  display: block;
+}}
 
-/* ── Page breaks ── */
-.page-break  {{ page-break-after: always; height: 0; }}
-.no-break    {{ page-break-inside: avoid; }}
-.break-before {{ page-break-before: always; }}
+/* ── Page break control ── */
+.page-break    {{ page-break-after: always; height: 0; display:block; }}
+.no-break      {{ page-break-inside: avoid; }}
+.break-before  {{ page-break-before: always; }}
 
-/* ── Section divider page ── */
+/* ── SECTION DIVIDER PAGE ──
+   FIX: table-cell vertical-align used instead of flexbox, because
+   wkhtmltopdf's print engine does not reliably center flex content. */
 .section-page {{
   page-break-before: always;
   page-break-after:  always;
-  min-height: 96vh;
-  display: flex; flex-direction: column;
-  justify-content: center; align-items: center;
-  text-align: center;
+  display: table;
+  table-layout: fixed;
+  width: 100%;
+  min-height: 220mm;
   background: {C['page_bg']};
 }}
+.section-page .sp-cell {{
+  display: table-cell;
+  vertical-align: middle;
+  text-align: center;
+  height: 220mm;
+}}
 .section-page .sp-label {{
-  font-size: {scaled(11)}pt;
+  font-size: {pt(10)}pt;
   color: {C['text_muted']};
-  letter-spacing: .18em;
-  margin-bottom: 16px;
+  letter-spacing: .15em;
+  margin-bottom: 14px;
   text-transform: uppercase;
 }}
 .section-page .sp-title {{
-  font-size: {scaled(30)}pt;
+  font-size: {pt(22)}pt;
   font-weight: bold;
   color: {C['text_primary']};
-  margin-bottom: 22px;
+  margin-bottom: 18px;
   line-height: 1.3;
 }}
 .section-page .sp-bar {{
-  width: 55px; height: 4px;
+  width: 46px; height: 3px;
   border-radius: 2px; margin: 0 auto;
 }}
 
-/* ── Chapter header ── */
+/* ── TITLE PAGE (same centering fix) ── */
+.title-page {{
+  display: table;
+  table-layout: fixed;
+  width: 100%;
+  min-height: 220mm;
+}}
+.title-page .tp-cell {{
+  display: table-cell;
+  vertical-align: middle;
+  text-align: center;
+  height: 220mm;
+}}
+
+/* ── CHAPTER HEADER ──
+   FIX: no longer forces a full empty page below short chapters;
+   page-break-before only (starts new page), no break-after. */
 .chapter-header {{
   page-break-before: always;
-  padding: 32px 28px 26px;
-  margin-bottom: 26px;
+  padding: 22px 20px 18px;
+  margin-bottom: 18px;
   position: relative;
   overflow: hidden;
-  border-radius: 0 0 10px 10px;
-  min-height: 95px;
+  border-radius: 0 0 8px 8px;
+  min-height: 70px;
 }}
 .chapter-header .ch-bgnum {{
   position: absolute;
-  left: 12px; top: -8px;
-  font-size: {scaled(90)}pt;
+  left: 10px; top: -10px;
+  font-size: {pt(58)}pt;
   font-weight: bold;
-  color: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.13);
   line-height: 1;
   direction: ltr;
   unicode-bidi: isolate;
@@ -204,236 +325,336 @@ body {{
 }}
 .chapter-header .ch-inner {{
   position: relative; z-index: 1;
+  max-width: 82%;
 }}
 .chapter-header .ch-label {{
-  font-size: {scaled(9)}pt;
-  letter-spacing: .22em;
-  color: rgba(255,255,255,0.72);
-  margin-bottom: 9px;
+  font-size: {pt(8)}pt;
+  letter-spacing: .18em;
+  color: rgba(255,255,255,0.75);
+  margin-bottom: 7px;
   text-transform: uppercase;
-  direction: rtl;
+  white-space: nowrap;
 }}
 .chapter-header .ch-title {{
-  font-size: {scaled(22)}pt;
+  font-size: {pt(15)}pt;
   font-weight: bold;
   color: #FFFFFF;
-  line-height: 1.35;
+  line-height: 1.4;
+  word-wrap: break-word;
 }}
 
 /* ── Visual placeholder ── */
 .visual-placeholder {{
   width: 100%;
-  height: {CO['visual_placeholder']['height_px']}px;
-  border: 1.5px dashed {C['placeholder_border']};
-  border-radius: 8px;
+  min-height: 110px;
+  border: 1.3px dashed {C['placeholder_border']};
+  border-radius: 7px;
   background: {C['placeholder_bg']};
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  margin: 16px 0 22px;
-  color: {C['placeholder_text']};
+  display: table;
+  margin: 12px 0 16px;
   page-break-inside: avoid;
   text-align: center;
 }}
+.visual-placeholder .vp-cell {{
+  display: table-cell;
+  vertical-align: middle;
+}}
 .visual-placeholder .vp-label {{
-  font-size: {scaled(11)}pt;
+  font-size: {pt(9.5)}pt;
   font-weight: bold;
-  margin-bottom: 4px;
+  color: {C['placeholder_text']};
+  margin-bottom: 3px;
 }}
 .visual-placeholder .vp-sub {{
-  font-size: {scaled(9)}pt;
-  opacity: 0.65;
+  font-size: {pt(8)}pt;
+  color: {C['placeholder_text']};
+  opacity: 0.7;
 }}
 
 /* ── Headings ── */
 h1 {{
-  font-size: {scaled(T['size_h1'])}pt; font-weight: bold;
+  font-size: {pt(T['size_h1']*0.72)}pt; font-weight: bold;
   color: {C['text_primary']};
   line-height: {T['h_line_height']};
-  margin: 20px 0 10px;
-  padding-bottom: 7px;
+  margin: 16px 0 8px;
+  padding-bottom: 6px;
   border-bottom: 2px solid {C['border_light']};
-  direction: rtl;
 }}
 h2 {{
-  font-size: {scaled(T['size_h2'])}pt; font-weight: bold;
+  font-size: {pt(T['size_h2']*0.78)}pt; font-weight: bold;
   color: {C['text_primary']};
-  margin: 18px 0 9px;
-  padding-right: 13px;
-  border-right: 4px solid {C['accent']};
-  direction: rtl;
+  margin: 14px 0 7px;
+  padding-right: 11px;
+  border-right: 3px solid {C['accent']};
 }}
 h2.prereq {{ border-right-color: {C['prereq_accent']}; }}
-h2.extra   {{ border-right-color: {C['section_accent']}; }}
+h2.extra  {{ border-right-color: {C['section_accent']}; }}
 h3 {{
-  font-size: {scaled(T['size_h3'])}pt; font-weight: bold;
+  font-size: {pt(T['size_h3']*0.85)}pt; font-weight: bold;
   color: {C['text_secondary']};
-  margin: 14px 0 7px;
-  direction: rtl;
+  margin: 11px 0 6px;
 }}
 h4 {{
-  font-size: {scaled(T['size_h4'])}pt; font-weight: bold;
+  font-size: {pt(T['size_h4']*0.9)}pt; font-weight: bold;
   color: {C['text_secondary']};
-  margin: 10px 0 5px;
-  direction: rtl;
+  margin: 9px 0 4px;
 }}
 
-/* ── Body text ── */
-p  {{ margin-bottom: 8px; direction: rtl; }}
+/* ── Body ── */
+p {{ margin-bottom: 7px; }}
 strong {{ font-weight: bold; color: {C['text_primary']}; }}
 em {{ font-style: italic; }}
 code {{
   font-family: 'Courier New', 'DejaVu Sans Mono', monospace;
   background: {C['accent_light']};
-  padding: 1px 5px; border-radius: 3px;
-  font-size: {scaled(9)}pt;
-  direction: ltr; unicode-bidi: isolate;
-  display: inline;
+  padding: 1px 4px; border-radius: 3px;
+  font-size: {pt(8)}pt;
 }}
 
-/* ── Lists ── */
-ul, ol {{ padding-right: 20px; margin: 7px 0 10px; direction: rtl; }}
-li {{ margin-bottom: 4px; line-height: {T['line_height']}; direction: rtl; }}
+ul, ol {{ padding-right: 17px; margin: 6px 0 9px; }}
+li {{ margin-bottom: 3px; line-height: {T['line_height']}; }}
 
-/* ── Topic divider (📌 line) ── */
+/* ── Topic divider ── */
 .topic-divider {{
-  display: flex; align-items: center; gap: 10px;
-  margin: 20px 0 12px;
+  display: table;
+  width: 100%;
+  margin: 16px 0 10px;
   page-break-inside: avoid;
-  direction: rtl;
 }}
+.topic-divider .td-row {{ display: table-row; }}
 .topic-divider .td-label {{
-  font-size: {scaled(T['size_h2'])}pt; font-weight: bold;
-  color: {C['text_primary']}; flex: 1;
+  display: table-cell;
+  font-size: {pt(T['size_h2']*0.78)}pt; font-weight: bold;
+  color: {C['text_primary']};
+  white-space: nowrap;
+  padding-left: 8px;
 }}
 .topic-divider .td-line {{
-  flex: 1; height: 1px; background: {C['border_light']};
+  display: table-cell;
+  width: 100%;
+  border-bottom: 1px solid {C['border_light']};
+  vertical-align: middle;
 }}
 
 /* ── Scenario card ── */
 .scenario-card {{
   border: 1px solid {C['scenario_border']};
-  border-radius: 8px; margin: 12px 0 18px;
+  border-radius: 7px; margin: 10px 0 14px;
   overflow: hidden; page-break-inside: avoid;
   background: {C['white']};
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }}
 .scenario-card .sc-head {{
   background: {C['scenario_header_bg']};
-  padding: 9px 16px;
+  padding: 7px 12px;
   border-bottom: 1px solid {C['border_light']};
-  direction: rtl;
 }}
 .scenario-card .sc-title {{
-  font-size: {scaled(11.5)}pt; font-weight: bold;
+  font-size: {pt(9.5)}pt; font-weight: bold;
   color: {C['text_primary']};
 }}
-.scenario-card .sc-body {{ padding: 16px; direction: rtl; }}
+.scenario-card .sc-body {{ padding: 12px; }}
 
 /* ── Patient quote ── */
 .patient-quote {{
   background: {C['scenario_header_bg']};
   border-right: 3px solid {C['accent']};
-  border-radius: 0 6px 6px 0;
-  padding: 9px 13px; margin: 7px 0 12px;
+  border-radius: 0 5px 5px 0;
+  padding: 7px 11px; margin: 5px 0 10px;
   font-style: italic; color: {C['text_primary']};
-  direction: rtl;
 }}
 
-/* ── Colored boxes ── */
+/* ── Boxes ── */
 .box {{
-  border-radius: 7px; padding: 12px 15px; margin: 9px 0;
-  page-break-inside: avoid; direction: rtl;
+  border-radius: 6px; padding: 10px 14px; margin: 7px 0;
+  page-break-inside: avoid;
+  overflow: hidden;
 }}
 .box .box-head {{
-  font-size: {scaled(10)}pt; font-weight: bold;
-  margin-bottom: 6px; direction: rtl;
+  font-size: {pt(8.5)}pt; font-weight: bold;
+  margin-bottom: 5px;
 }}
-.box-warning  {{ background:{C['warning_bg']};  border:1px solid {C['warning_border']};  border-right:4px solid {C['warning_border']};  color:{C['warning_text']}; }}
-.box-tip      {{ background:{C['tip_bg']};      border:1px solid {C['tip_border']};      border-right:4px solid {C['tip_border']};      color:{C['tip_text']}; }}
-.box-question {{ background:{C['question_bg']}; border:1px solid {C['question_border']}; border-right:4px solid {C['question_border']}; }}
-.box-dont     {{ background:{C['dont_bg']};     border:1px solid {C['dont_border']};     border-right:4px solid {C['dont_border']};     color:{C['dont_text']}; }}
-.box-diag     {{ background:{C['diagnosis_bg']}; border:1px solid {C['diagnosis_border']}; border-right:4px solid {C['diagnosis_border']}; }}
-.box-rec      {{ background:#EFF8FF; border:1px solid #4A9CBF; border-right:4px solid #4A9CBF; }}
-.box-summary  {{ background:{C['accent_light']}; border:1px solid {C['accent']}; border-right:4px solid {C['accent']}; }}
+.box ul, .box ol {{
+  padding-right: 15px;
+  margin: 4px 0 2px;
+}}
+.box li {{
+  margin-bottom: 4px;
+  word-wrap: break-word;
+}}
+.box-warning  {{ background:{C['warning_bg']};  border:1px solid {C['warning_border']};  border-right:3px solid {C['warning_border']};  color:{C['warning_text']}; }}
+.box-tip      {{ background:{C['tip_bg']};      border:1px solid {C['tip_border']};      border-right:3px solid {C['tip_border']};      color:{C['tip_text']}; }}
+.box-question {{ background:{C['question_bg']}; border:1px solid {C['question_border']}; border-right:3px solid {C['question_border']}; }}
+.box-dont     {{ background:{C['dont_bg']};     border:1px solid {C['dont_border']};     border-right:3px solid {C['dont_border']};     color:{C['dont_text']}; }}
+.box-diag     {{ background:{C['diagnosis_bg']}; border:1px solid {C['diagnosis_border']}; border-right:3px solid {C['diagnosis_border']}; }}
+.box-rec      {{ background:#EFF8FF; border:1px solid #4A9CBF; border-right:3px solid #4A9CBF; }}
+.box-summary  {{ background:{C['accent_light']}; border:1px solid {C['accent']}; border-right:3px solid {C['accent']}; }}
 
-/* ── Tables ── */
+/* ── Tables ──
+   FIX: table-layout fixed + explicit column wrapping so Latin codes
+   never overflow the cell border (the "text outside tables" bug). */
 table {{
-  width: 100%; border-collapse: collapse;
-  margin: 10px 0 14px; font-size: {scaled(9.5)}pt;
-  page-break-inside: avoid; direction: rtl;
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin: 8px 0 12px; font-size: {pt(8)}pt;
+  page-break-inside: avoid;
 }}
 thead tr {{ background: {C['table_header_bg']}; }}
 thead th {{
-  padding: 8px 10px; font-weight: bold;
-  font-size: {scaled(9.5)}pt; text-align: right;
+  padding: 6px 8px; font-weight: bold;
+  font-size: {pt(8)}pt; text-align: right;
   border: 1px solid {C['border_medium']};
-  color: {C['text_primary']}; direction: rtl;
+  color: {C['text_primary']};
+  word-wrap: break-word; overflow-wrap: break-word;
 }}
 tbody tr {{ background: {C['white']}; }}
 tbody tr:nth-child(even) {{ background: {C['table_row_alt']}; }}
 tbody td {{
-  padding: 7px 10px; border: 1px solid {C['border_light']};
-  vertical-align: top; text-align: right; direction: rtl;
+  padding: 6px 8px; border: 1px solid {C['border_light']};
+  vertical-align: top; text-align: right;
+  word-wrap: break-word; overflow-wrap: break-word;
 }}
 
 /* ── Blockquote ── */
 blockquote {{
-  border-right: 4px solid {C['accent']};
+  border-right: 3px solid {C['accent']};
   background: {C['accent_light']};
-  border-radius: 0 8px 8px 0;
-  padding: 10px 14px; margin: 10px 0;
+  border-radius: 0 6px 6px 0;
+  padding: 8px 11px; margin: 8px 0;
   color: {C['accent_dark']}; font-style: italic;
-  direction: rtl;
+  font-size: {pt(9)}pt;
 }}
 
 /* ── Pre / code block ── */
 pre {{
   background: #F5F2ED; border: 1px solid {C['border_light']};
-  border-radius: 6px; padding: 10px;
-  direction: ltr; unicode-bidi: isolate;
-  font-size: {scaled(8.5)}pt;
-  overflow-x: auto; margin: 10px 0;
-  white-space: pre-wrap; word-break: break-all;
+  border-radius: 5px; padding: 8px;
+  font-size: {pt(7.5)}pt;
+  overflow-x: auto; margin: 8px 0;
+  white-space: pre-wrap; word-break: break-word;
 }}
 
 /* ── Chapter footer ── */
 .ch-footer {{
-  margin-top: 22px; padding-top: 10px;
+  margin-top: 16px; padding-top: 8px;
   border-top: 1px solid {C['border_light']};
-  font-size: {scaled(8)}pt; color: {C['text_muted']};
+  font-size: {pt(7)}pt; color: {C['footer_text']};
   text-align: center;
 }}
 
-/* ── HR ── */
-hr {{ border: none; border-top: 1px solid {C['border_light']}; margin: 12px 0; }}
+hr {{ border: none; border-top: 1px solid {C['border_light']}; margin: 10px 0; }}
 """
 
 # ═══════════════════════════════════════════════════════════════════════
-# HELPERS
+# TEXT HELPERS
 # ═══════════════════════════════════════════════════════════════════════
 def esc(t):
-    return t.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-# Wrap Latin sequences (codes, drug names, abbreviations) in LTR spans
+# Matches a Latin run together with any directly-touching neutral/weak
+# bidi punctuation (=, (, ), +, -, :) on either side. Swallowing this
+# punctuation INTO the same isolated unit as the Latin run is the fix
+# for a confirmed wkhtmltopdf/WebKit bidi-reordering bug: when a neutral
+# character like "=" or "(" is left stranded between an RTL run and an
+# isolated LTR run, the renderer's bidi algorithm visually overlaps the
+# glyphs at that seam (reproduced and confirmed via isolated test cases,
+# e.g. "= Otitis Media (التهاب..." collided; "Otitis Media (" as one
+# isolated unit does not).
+#
+# SECOND FIX (found in full-book render audit): a bare leading numeral
+# like "4." (list numbering) or "5-10" (a day range) was matching this
+# pattern on its OWN, "stealing" the match before a LATER real Latin
+# word's leading "(" could attach to it — e.g. in
+# "4. ... العمل (Mechanism of Action)", the "4." consumed itself as an
+# isolated unit, leaving "(Mechanism" with its opening paren stranded
+# and uncollided-free. Requiring at least one actual LETTER in the
+# core (via lookahead) excludes pure-numeral noise from ever matching,
+# so the next real word's leading punctuation is free to attach.
+_LATIN_CORE = (
+    r'(?=[A-Za-z0-9\-\._%+/]*[A-Za-z])'   # lookahead: must contain ≥1 letter
+    r'[A-Za-z0-9][A-Za-z0-9\-\._%+/]*'    # so bare numerals (e.g. "4.", "15-15")
+    r'(?:\s+[A-Za-z0-9\-\._%+/]+)*'       # never falsely "steal" isolation from
+)                                          # a following parenthesis (see FIX below)
 _LATIN_PAT = re.compile(
-    r'([A-Za-z][A-Za-z0-9\-\._%+/]{1,}(?:\s*[A-Za-z0-9\-]+)*)'
+    r'((?:[=\(\)\+\-:]\s*)?)'        # optional leading neutral punctuation
+    r'(' + _LATIN_CORE + r')'        # the Latin run itself
+    r'((?:\s*[=\(\)\+\-:])?)'        # optional trailing neutral punctuation
 )
-def isolate_ltr(text):
-    """Wrap Latin-dominant substrings in LTR isolation spans."""
-    def replace(m):
-        s = m.group(1)
-        return f'<span class="ltr">{esc(s)}</span>'
-    return _LATIN_PAT.sub(replace, text)
 
-def inline_md(t):
+def isolate_ltr_raw(raw_text):
+    """
+    Runs on RAW escaped text only — BEFORE any markdown (**, *, `) is
+    converted to real HTML tags. This ordering is critical: doing this
+    after tag creation was the v2 root-cause bug (it matched literal
+    tag names like 'strong' as if they were Latin drug-name text).
+    """
+    def repl(m):
+        lead, core, trail = m.group(1), m.group(2), m.group(3)
+        # NOTE: \x02 placed AFTER `trail`, not before — ensures trailing
+        # punctuation like "(" stays INSIDE the isolated span boundary.
+        return f"{lead}\x01{core}{trail}\x02"
+    return _LATIN_PAT.sub(repl, raw_text)
+
+def normalize_adjacent_bold(text):
+    """
+    FIX: merge **X** = **Y**  →  **X = Y**  (single <strong> span).
+    Two adjacent <strong> elements separated only by neutral punctuation
+    triggers the same WebKit bidi bug even when each side is individually
+    isolated correctly. This is rare in the source content (found once
+    across all 26 files) but merging proactively removes the trigger.
+    """
+    pattern = re.compile(r'\*\*([^*]+?)\*\*(\s*[=\-:]\s*)\*\*([^*]+?)\*\*')
+    # Run twice to catch chains of 3+ adjacent bold spans, if any.
+    text = pattern.sub(lambda m: f'**{m.group(1)}{m.group(2)}{m.group(3)}**', text)
+    text = pattern.sub(lambda m: f'**{m.group(1)}{m.group(2)}{m.group(3)}**', text)
+    return text
+
+def finalize_ltr_markers(html_text):
+    """
+    Convert \x01...\x02 markers into real <span class='ltr'> tags.
+
+    FIX v3 (final) — root cause of the visual collision was wkhtmltopdf's
+    WebKit engine re-flowing inline-level bidi-isolated spans alongside
+    bold Arabic text using its (buggy) Unicode bidi reordering. Neither
+    RLM marks nor thin-space characters reliably fixed this (confirmed
+    by render tests). The robust fix: render every .ltr span as
+    `display:inline-block`. This removes it from the surrounding line's
+    bidi reordering algorithm ENTIRELY — the browser treats it as an
+    atomic box, like an image, so it can never be glyph-overlapped with
+    neighboring RTL text regardless of bold/nesting context.
+
+    UPDATE (final root-cause fix): inline-block alone did NOT fix the
+    collision (confirmed by render test). The actual fix was upstream,
+    in isolate_ltr_raw() — swallowing adjacent neutral punctuation
+    (=, (, ), etc.) into the SAME isolated unit as the Latin run. Kept
+    as inline-block here too since it's a harmless additional safeguard.
+    """
+    html_text = html_text.replace("\x01", '<span class="ltr">')
+    html_text = html_text.replace("\x02", '</span>')
+    return html_text
+
+def inline_md(raw):
+    """
+    Correct pipeline order (fully debugged):
+      1. Normalize adjacent bold spans joined by neutral punctuation
+         (fixes the **X** = **Y** WebKit bidi trigger)
+      2. Escape HTML special chars on RAW text
+      3. Isolate Latin runs + their touching neutral punctuation
+         (marker tokens \\x01..\\x02 — not real tags yet)
+      4. Apply markdown bold/italic/code (creates real tags; regex only
+         matches literal '**','*','`' chars, never touches the markers)
+      5. Finalize LTR markers into real <span class="ltr"> tags
+    """
+    t = normalize_adjacent_bold(raw)
+    t = esc(t)
+    t = isolate_ltr_raw(t)
     # Bold
-    t = re.sub(r'\*\*(.+?)\*\*', lambda m: f'<strong>{inline_md(m.group(1))}</strong>', t)
-    # Italic
-    t = re.sub(r'\*(.+?)\*',     lambda m: f'<em>{m.group(1)}</em>', t)
+    t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
+    # Italic (after bold, so ** is consumed first)
+    t = re.sub(r'\*(.+?)\*', r'<em>\1</em>', t)
     # Inline code
-    t = re.sub(r'`([^`]+)`',     lambda m: f'<code class="ltr">{esc(m.group(1))}</code>', t)
-    # After bold/italic, isolate Latin
-    t = isolate_ltr(t)
+    t = re.sub(r'`([^`]+)`', r'<code class="ltr-inline">\1</code>', t)
+    t = finalize_ltr_markers(t)
     return t
 
 def make_table(lines):
@@ -446,44 +667,42 @@ def make_table(lines):
         rows.append(cells)
     if not rows:
         return ""
-    html = '<table class="no-break">\n  <thead><tr>'
-    for c in rows[0]:
-        html += f'<th>{inline_md(esc(c))}</th>'
-    html += '</tr></thead>\n  <tbody>\n'
+    ncols = len(rows[0])
+    html = ['<table class="no-break">']
+    html.append('<colgroup>' + f'<col style="width:{100/ncols:.1f}%">' * ncols + '</colgroup>')
+    html.append('<thead><tr>' + ''.join(f'<th>{inline_md(c)}</th>' for c in rows[0]) + '</tr></thead>')
+    html.append('<tbody>')
     for row in rows[1:]:
-        html += '    <tr>'
-        for c in row:
-            html += f'<td>{inline_md(esc(c))}</td>'
-        html += '</tr>\n'
-    html += '  </tbody>\n</table>\n'
-    return html
+        cells = row + [''] * (ncols - len(row))  # pad short rows
+        html.append('<tr>' + ''.join(f'<td>{inline_md(c)}</td>' for c in cells[:ncols]) + '</tr>')
+    html.append('</tbody></table>')
+    return '\n'.join(html) + '\n'
 
 def visual_placeholder(label="مساحة للصورة التوضيحية", sub="تُضاف لاحقاً"):
-    return (f'<div class="visual-placeholder">'
+    return (f'<div class="visual-placeholder"><div class="vp-cell">'
             f'<div class="vp-label">[ {esc(label)} ]</div>'
             f'<div class="vp-sub">{esc(sub)}</div>'
-            f'</div>\n')
+            f'</div></div>\n')
 
 BOX_MAP = {
-    '⚡': ('box-question', '[ اسأل أولاً ]'),
-    '🔍': ('box-diag',     '[ التشخيص ]'),
-    '💊': ('box-rec',      '[ التوصية ]'),
-    '🚨': ('box-warning',  '[ تحذير — أحوّله فوراً ]'),
-    '❌': ('box-dont',     '[ لا تعطي ]'),
-    '💡': ('box-tip',      '[ ملاحظة مهمة ]'),
-    '📋': ('box-summary',  '[ ملخص ]'),
+    '⚡': ('box-question', 'اسأل أولاً'),
+    '🔍': ('box-diag',     'التشخيص'),
+    '💊': ('box-rec',      'التوصية'),
+    '🚨': ('box-warning',  'تحذير — أحوّله فوراً'),
+    '❌': ('box-dont',     'لا تعطي'),
+    '💡': ('box-tip',      'ملاحظة مهمة'),
+    '📋': ('box-summary',  'ملخص'),
 }
 
-def flush_box(emoji, items):
+def render_box(emoji, items):
     if not emoji or not items:
         return ""
     cls, label = BOX_MAP.get(emoji, ('box-tip', ''))
-    li = ''.join(f'<li>{inline_md(esc(x))}</li>' for x in items)
-    inner = f'<ul>{li}</ul>' if li else ''
-    return f'<div class="box {cls} no-break"><div class="box-head">{label}</div>{inner}</div>\n'
+    li = ''.join(f'<li>{inline_md(x)}</li>' for x in items)
+    return f'<div class="box {cls} no-break"><div class="box-head">{esc(label)}</div><ul>{li}</ul></div>\n'
 
 # ═══════════════════════════════════════════════════════════════════════
-# MARKDOWN → HTML  (fixed parser)
+# MARKDOWN → HTML PARSER
 # ═══════════════════════════════════════════════════════════════════════
 def md2html(md, h2_class=""):
     lines   = md.split('\n')
@@ -495,158 +714,152 @@ def md2html(md, h2_class=""):
     lst_tag = None
     in_code = False
     code_buf= []
-    in_sc   = False   # inside scenario card
+    in_sc   = False
     sc_head = ""
-    sc_buf  = []      # scenario body lines
+    sc_buf  = []
 
-    def push(el, force_main=False):
-        if in_sc and not force_main:
-            sc_buf.append(el)
-        else:
-            out.append(el)
+    def push(el):
+        (sc_buf if in_sc else out).append(el)
 
-    def do_flush_list():
+    def flush_list():
         nonlocal lst_buf, lst_tag
         if not lst_buf:
             return
         tag = 'ol' if lst_tag == 'ol' else 'ul'
-        items = ''.join(f'<li>{inline_md(esc(x))}</li>' for x in lst_buf)
+        items = ''.join(f'<li>{inline_md(x)}</li>' for x in lst_buf)
         push(f'<{tag}>{items}</{tag}>\n')
         lst_buf = []; lst_tag = None
 
-    def do_flush_box():
+    def flush_box():
         nonlocal box_em, box_buf
-        push(flush_box(box_em, box_buf))
+        if box_em and box_buf:
+            push(render_box(box_em, box_buf))
         box_em = None; box_buf = []
 
-    def do_flush_sc():
+    def flush_scenario():
         nonlocal in_sc, sc_buf, sc_head
         if not in_sc:
             return
         body = '\n'.join(sc_buf)
         out.append(
-            f'<div class="scenario-card no-break">'
+            '<div class="scenario-card no-break">'
             f'<div class="sc-head"><div class="sc-title">{sc_head}</div></div>'
             f'<div class="sc-body">{body}</div></div>\n'
         )
         in_sc = False; sc_buf = []; sc_head = ""
 
     while i < len(lines):
-        raw = lines[i]; line = raw.rstrip()
+        raw  = lines[i]
+        line = raw.rstrip()
 
-        # ── Code block toggle ──────────────────────────────────────────
+        # Code fence
         if line.strip().startswith('```'):
             if in_code:
                 in_code = False
-                code_text = esc('\n'.join(code_buf))
-                push(f'<pre class="ltr-block"><code>{code_text}</code></pre>\n')
+                code_html = esc('\n'.join(code_buf))
+                push(f'<pre class="ltr-block"><code>{code_html}</code></pre>\n')
                 code_buf = []
             else:
-                do_flush_list(); do_flush_box()
+                flush_list(); flush_box()
                 in_code = True
             i += 1; continue
-
         if in_code:
-            code_buf.append(raw)
-            i += 1; continue
+            code_buf.append(raw); i += 1; continue
 
-        # ── Blank line ─────────────────────────────────────────────────
+        # Blank line
         if not line.strip():
-            do_flush_list()
-            i += 1; continue
+            flush_list(); i += 1; continue
 
-        # ── H1: SKIP entirely — chapter header from JSON is used ───────
+        # H1 — SKIP rendering text (chapter header from JSON used instead);
+        # just emit the chapter-illustration placeholder once.
         if line.startswith('# '):
-            # Close any open scenario but do NOT render H1
-            do_flush_list(); do_flush_box(); do_flush_sc()
-            # Only add visual placeholder (for chapter illustration)
+            flush_list(); flush_box(); flush_scenario()
             out.append(visual_placeholder("صورة توضيحية للفصل"))
             i += 1; continue
 
-        # ── Topic divider (## 📌 ...) ──────────────────────────────────
+        # Topic divider  ## 📌 ...
         if re.match(r'^##\s*📌', line):
-            do_flush_list(); do_flush_box(); do_flush_sc()
+            flush_list(); flush_box(); flush_scenario()
             txt = re.sub(r'^##\s*📌\s*', '', line).strip()
-            push(f'<div class="topic-divider">'
-                 f'<span class="td-label">{inline_md(esc(txt))}</span>'
-                 f'<span class="td-line"></span></div>\n', force_main=True)
+            out.append(
+                '<div class="topic-divider"><div class="td-row">'
+                f'<div class="td-label">{inline_md(txt)}</div>'
+                '<div class="td-line"></div>'
+                '</div></div>\n'
+            )
             i += 1; continue
 
-        # ── H2 ─────────────────────────────────────────────────────────
+        # H2
         if line.startswith('## '):
-            do_flush_list(); do_flush_box(); do_flush_sc()
+            flush_list(); flush_box(); flush_scenario()
             txt = line[3:].strip()
-            push(f'<h2 class="{h2_class}">{inline_md(esc(txt))}</h2>\n', force_main=True)
+            out.append(f'<h2 class="{h2_class}">{inline_md(txt)}</h2>\n')
             i += 1; continue
 
-        # ── Scenario card header (### 🗣️ ...) ─────────────────────────
+        # Scenario header  ### 🗣️ ...
         if re.match(r'^###\s*🗣', line):
-            do_flush_list(); do_flush_box(); do_flush_sc()
+            flush_list(); flush_box(); flush_scenario()
             txt = re.sub(r'^###\s*🗣️?\s*', '', line).strip()
-            in_sc   = True
-            sc_head = inline_md(esc(txt))
+            in_sc, sc_head = True, inline_md(txt)
             i += 1; continue
 
-        # ── H3 ─────────────────────────────────────────────────────────
+        # H3
         if line.startswith('### '):
-            do_flush_list(); do_flush_box()
-            do_flush_sc()
+            flush_list(); flush_box(); flush_scenario()
             txt = line[4:].strip()
-            push(f'<h3>{inline_md(esc(txt))}</h3>\n')
+            push(f'<h3>{inline_md(txt)}</h3>\n')
             i += 1; continue
 
-        # ── H4 ─────────────────────────────────────────────────────────
+        # H4
         if line.startswith('#### '):
-            do_flush_list(); do_flush_box()
+            flush_list(); flush_box()
             txt = line[5:].strip()
-            push(f'<h4>{inline_md(esc(txt))}</h4>\n')
+            push(f'<h4>{inline_md(txt)}</h4>\n')
             i += 1; continue
 
-        # ── Table ──────────────────────────────────────────────────────
+        # Table
         if line.strip().startswith('|'):
-            do_flush_list(); do_flush_box()
+            flush_list(); flush_box()
             tbl_lines = []
             while i < len(lines) and lines[i].strip().startswith('|'):
-                tbl_lines.append(lines[i])
-                i += 1
+                tbl_lines.append(lines[i]); i += 1
             push(make_table(tbl_lines))
             continue
 
-        # ── Horizontal rule ────────────────────────────────────────────
+        # HR
         if re.match(r'^[-*_]{3,}$', line.strip()):
-            do_flush_list(); do_flush_box()
-            push('<hr/>\n')
-            i += 1; continue
+            flush_list(); flush_box()
+            push('<hr/>\n'); i += 1; continue
 
-        # ── Blockquote ─────────────────────────────────────────────────
+        # Blockquote
         if line.startswith('>'):
-            do_flush_list(); do_flush_box()
+            flush_list(); flush_box()
             txt = line.lstrip('> ').strip()
-            push(f'<blockquote>{inline_md(esc(txt))}</blockquote>\n')
+            push(f'<blockquote>{inline_md(txt)}</blockquote>\n')
             i += 1; continue
 
-        # ── Emoji box header (bold line with known emoji) ──────────────
+        # Emoji box header   **⚡ ...**
         m = re.match(r'^\*\*(⚡|🔍|💊|🚨|❌|💡|📋)[^*]*\*\*\s*:?\s*$', line.strip())
         if m:
-            do_flush_list()
+            flush_list()
             if box_em:
-                do_flush_box()
-            box_em  = m.group(1)
-            box_buf = []
+                flush_box()
+            box_em, box_buf = m.group(1), []
             i += 1; continue
 
-        # ── Patient dialogue (**المريض:** "...") ─────────────────────
-        pm = re.match(r'^\*\*(المريض[^:]*|المريضة[^:]*|الأم[^:]*)\*\*\s*:\s*[\*\"\'"\u201c\u201d](.+?)[\*\"\'"\u201c\u201d]?\s*$', line.strip())
+        # Patient dialogue   **المريض:** "..."
+        pm = re.match(
+            r'^\*\*(المريض[^:*]*|المريضة[^:*]*|الأم[^:*]*)\*\*\s*:\s*[\*"\'\u201c](.+?)[\*"\'\u201d]?\s*$',
+            line.strip()
+        )
         if pm:
-            do_flush_list(); do_flush_box()
-            who   = pm.group(1)
-            quote = pm.group(2).strip().strip('*"\'')
-            el = (f'<p><strong>{esc(who)}:</strong></p>'
-                  f'<div class="patient-quote">&quot;{inline_md(esc(quote))}&quot;</div>\n')
-            push(el)
+            flush_list(); flush_box()
+            who, quote = pm.group(1), pm.group(2).strip().strip('*"\'')
+            push(f'<p><strong>{esc(who)}:</strong></p>'
+                 f'<div class="patient-quote">&quot;{inline_md(quote)}&quot;</div>\n')
             i += 1; continue
 
-        # ── Bullet / numbered list ─────────────────────────────────────
+        # Lists
         bm = re.match(r'^(\s*)[-*]\s+(.+)', line)
         nm = re.match(r'^(\s*)\d+\.\s+(.+)', line)
         if bm or nm:
@@ -656,20 +869,19 @@ def md2html(md, h2_class=""):
                 box_buf.append(txt)
             else:
                 if lst_tag != kind:
-                    do_flush_list()
-                    lst_tag = kind
+                    flush_list(); lst_tag = kind
                 lst_buf.append(txt)
             i += 1; continue
 
-        # ── Regular paragraph ──────────────────────────────────────────
-        do_flush_list()
+        # Paragraph
+        flush_list()
         if box_em:
             box_buf.append(line.strip())
         else:
-            push(f'<p>{inline_md(esc(line.strip()))}</p>\n')
+            push(f'<p>{inline_md(line.strip())}</p>\n')
         i += 1
 
-    do_flush_list(); do_flush_box(); do_flush_sc()
+    flush_list(); flush_box(); flush_scenario()
     return ''.join(out)
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -677,67 +889,53 @@ def md2html(md, h2_class=""):
 # ═══════════════════════════════════════════════════════════════════════
 def section_page(sec):
     color = sec["accent"]
-    return (f'<div class="section-page">'
-            f'<div class="sp-label">{esc(sec["label"])}</div>'
-            f'<div class="sp-title">{esc(sec["title_ar"])}</div>'
-            f'<div class="sp-bar" style="background:{color}"></div>'
-            f'</div>\n')
+    return (
+        '<div class="section-page"><div class="sp-cell">'
+        f'<div class="sp-label">{esc(sec["label"])}</div>'
+        f'<div class="sp-title">{esc(sec["title_ar"])}</div>'
+        f'<div class="sp-bar" style="background:{color}"></div>'
+        '</div></div>\n'
+    )
 
 def chapter_header(item, sec):
     color = sec["accent"]
     lbl   = f'{esc(sec["label"])} — الفصل {esc(item["num"])}'
-    num   = item["num"]
-    return (f'<div class="chapter-header" style="background:{color}">'
-            f'<div class="ch-bgnum ltr">{num}</div>'
-            f'<div class="ch-inner">'
-            f'<div class="ch-label">{lbl}</div>'
-            f'<div class="ch-title">{esc(item["title_ar"])}</div>'
-            f'</div></div>\n')
+    return (
+        f'<div class="chapter-header" style="background:{color}">'
+        f'<div class="ch-bgnum ltr">{item["num"]}</div>'
+        '<div class="ch-inner">'
+        f'<div class="ch-label">{lbl}</div>'
+        f'<div class="ch-title">{esc(item["title_ar"])}</div>'
+        '</div></div>\n'
+    )
 
 def title_page():
-    return f"""
-<div class="section-page">
-  <div style="font-family:'{FONT_NAME}',serif;font-size:{scaled(40)}pt;font-weight:bold;
-              color:{C['accent']};letter-spacing:-.01em;margin-bottom:4px;direction:ltr">
-    BetterDiagnosis
-  </div>
-  <div style="font-size:{scaled(26)}pt;font-weight:bold;color:{C['text_primary']};
-              margin-bottom:12px;direction:rtl">
-    {esc(META['title_ar'])}
-  </div>
-  <div style="width:50px;height:3px;background:{C['accent']};
-              border-radius:2px;margin:0 auto 18px"></div>
-  <div style="font-size:{scaled(12)}pt;color:{C['text_secondary']};
-              margin-bottom:36px;direction:rtl">
-    {esc(META['tagline_ar'])}
-  </div>
-  <div style="font-size:{scaled(8.5)}pt;color:{C['text_muted']};direction:rtl">
-    {esc(META['edition'])} &nbsp;&middot;&nbsp; {esc(META['copyright'])}
-  </div>
-</div>
-"""
+    return (
+        '<div class="title-page"><div class="tp-cell">'
+        f'<div style="font-family:\'{FONT_NAME}\',serif;font-size:{pt(30)}pt;font-weight:bold;'
+        f'color:{C["accent"]};letter-spacing:-.01em;margin-bottom:4px;direction:ltr">'
+        'BetterDiagnosis</div>'
+        f'<div style="font-size:{pt(19)}pt;font-weight:bold;color:{C["text_primary"]};margin-bottom:10px">'
+        f'{esc(META["title_ar"])}</div>'
+        f'<div style="width:42px;height:3px;background:{C["accent"]};border-radius:2px;margin:0 auto 14px"></div>'
+        f'<div style="font-size:{pt(10)}pt;color:{C["text_secondary"]};margin-bottom:28px">'
+        f'{esc(META["tagline_ar"])}</div>'
+        f'<div style="font-size:{pt(7.5)}pt;color:{C["text_muted"]}">'
+        f'{esc(META["edition"])} &nbsp;&middot;&nbsp; {esc(META["copyright"])}</div>'
+        '</div></div>\n'
+    )
 
-# ═══════════════════════════════════════════════════════════════════════
-# RESOLVE FILE PATH
-# ═══════════════════════════════════════════════════════════════════════
 def resolve(filename, sec_id):
-    if sec_id == "prereqs":
-        return BOOK_ROOT / filename
-    return MAIN_DIR / filename
+    return (BOOK_ROOT if sec_id == "prereqs" else MAIN_DIR) / filename
 
 # ═══════════════════════════════════════════════════════════════════════
-# BUILD HTML
+# BUILD
 # ═══════════════════════════════════════════════════════════════════════
 def build():
-    css   = build_css()
+    css = build_css()
     parts = [f"""<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8"/>
-<title>BetterDiagnosis</title>
-<style>{css}</style>
-</head>
-<body>
+<html lang="ar" dir="rtl"><head><meta charset="UTF-8"/><title>BetterDiagnosis</title>
+<style>{css}</style></head><body>
 {title_page()}
 """]
 
@@ -750,19 +948,16 @@ def build():
             if not path.exists():
                 print(f"  ⚠  MISSING: {path}", file=sys.stderr)
                 continue
-
             md = path.read_text(encoding="utf-8")
             print(f"  ✓  {item['file']}")
-
             parts.append(chapter_header(item, sec))
             parts.append(md2html(md, h2_class=h2c))
             parts.append(
-                f'<div class="ch-footer">'
-                f'{esc(sec["label"])} — {esc(item["title_ar"])}'
-                f' &nbsp;&middot;&nbsp; BetterDiagnosis {esc(META["edition"])}'
-                f'</div>\n'
-                f'<div class="page-break"></div>\n'
+                f'<div class="ch-footer">{esc(sec["label"])} — {esc(item["title_ar"])} '
+                f'&nbsp;&middot;&nbsp; BetterDiagnosis {esc(META["edition"])}</div>\n'
             )
+            # NOTE: page-break-before is on the NEXT chapter-header, not forced here,
+            # so short chapters no longer leave a half-empty page (FIX for BUG 3).
 
     parts.append("</body></html>")
     return ''.join(parts)
@@ -771,60 +966,34 @@ def build():
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("\nBetterDiagnosis Book Builder v2")
-    print("─" * 40)
+    print("\nBetterDiagnosis Book Builder v4 (WeasyPrint engine)")
+    print("─" * 44)
     print(f"Book root : {BOOK_ROOT}")
     print(f"Font      : {FONT_NAME}")
-    print(f"Zoom      : {ZOOM}x (corrects 96-DPI → 72-DPI)")
+    print(f"Trim size : {PAGE_W_MM}mm × {PAGE_H_MM}mm  (6in × 9in book format)")
+    print(f"Engine    : WeasyPrint")
     print(f"Output    : {OUT_PDF}")
-    print("─" * 40)
+    print("─" * 44)
 
     print("\nBuilding HTML...")
     html = build()
     OUT_HTML.write_text(html, encoding="utf-8")
-    size_kb = len(html) // 1024
-    print(f"HTML done: {size_kb} KB")
+    print(f"HTML done: {len(html)//1024} KB")
 
-    print("\nConverting to PDF...")
-    cmd = [
-        "wkhtmltopdf",
-        "--enable-local-file-access",
-        "--background",
-        "--print-media-type",
-        "--encoding", "utf-8",
-        "--page-size", "A4",
-        # ── Zoom fix: corrects 96dpi screen rendering → 72dpi PDF ──
-        "--zoom", str(ZOOM),
-        "--disable-smart-shrinking",
-        "--dpi", "300",
-        # ── Margins ──
-        "--margin-top",    f"{P['margin_top_mm']}mm",
-        "--margin-bottom", f"{P['margin_bottom_mm']}mm",
-        "--margin-right",  f"{P['margin_inner_mm']}mm",
-        "--margin-left",   f"{P['margin_outer_mm']}mm",
-        # ── Footer ──
-        "--footer-center", f"BetterDiagnosis — {META['title_ar']}",
-        "--footer-right",  "[page]",
-        "--footer-font-size", "7",
-        "--footer-spacing", "5",
-        "--quiet",
-        str(OUT_HTML),
-        str(OUT_PDF),
-    ]
+    print("\nConverting to PDF (WeasyPrint)...")
+    try:
+        from weasyprint import HTML
+    except ImportError:
+        print("\n✗ WeasyPrint not installed.")
+        print("  Run: pip install weasyprint")
+        print("  (or re-run install_env.sh, which now installs it automatically)")
+        sys.exit(1)
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
+    try:
+        HTML(string=html, base_url=str(SCRIPT_DIR)).write_pdf(str(OUT_PDF))
         mb = OUT_PDF.stat().st_size / 1_000_000
-        print(f"\nDone! PDF: {OUT_PDF}")
-        print(f"Size: {mb:.1f} MB")
-        print("\nClean up temp HTML? (y/n): ", end="", flush=True)
-        try:
-            ans = input().strip().lower()
-            if ans == 'y':
-                OUT_HTML.unlink()
-                print("Temp HTML removed.")
-        except EOFError:
-            OUT_HTML.unlink()
-    else:
-        print(f"\nwkhtmltopdf error:\n{result.stderr[:800]}")
+        print(f"\n✓ Done! PDF: {OUT_PDF}")
+        print(f"  Size: {mb:.1f} MB")
+    except Exception as e:
+        print(f"\n✗ WeasyPrint error:\n{e}")
         sys.exit(1)
