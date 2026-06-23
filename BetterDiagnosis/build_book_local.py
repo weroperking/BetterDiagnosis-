@@ -106,6 +106,7 @@ JSON_FILE  = SCRIPT_DIR / "the_book.json"
 FONTS_DIR  = SCRIPT_DIR / "fonts"
 OUT_HTML   = SCRIPT_DIR / "_book_build.html"
 OUT_PDF    = SCRIPT_DIR / "BetterDiagnosis_book.pdf"
+IMAGES_DIR = SCRIPT_DIR / "images"   # 0.png .. 25.png — see visual_placeholder()
 
 if not JSON_FILE.exists():
     print(f"ERROR: {JSON_FILE} not found.")
@@ -387,6 +388,35 @@ code.ltr-inline {{
   margin-top: 2px;
   direction: ltr;
   unicode-bidi: isolate;
+}}
+
+/* ── Visual placeholder WITH a real image dropped in ──
+   Same outer box / aspect-ratio as the dashed placeholder above, but
+   the caption text is replaced by an actual <img>. Falls back to the
+   dashed placeholder automatically whenever images/{{slot}}.png is
+   missing, so a partial image set still produces a complete PDF. */
+.visual-placeholder.has-image {{
+  border: none;
+  background: transparent;
+  display: block;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}}
+.visual-placeholder.has-image .vp-img {{
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: 7px;
+}}
+.visual-placeholder.has-image .vp-marker {{
+  /* Kept in the text layer for generate_image_spec(), but visually
+     fully suppressed now that a real photo sits underneath it. */
+  position: absolute;
+  bottom: 1px; left: 3px;
+  color: rgba(0,0,0,0.01);
+  opacity: 1;
 }}
 
 /* ── Headings ──
@@ -812,9 +842,23 @@ def visual_placeholder(kind, description_ar, description_en, aspect_ratio,
     context_title    : chapter/topic title this placeholder belongs to,
                         used only for the spec file, not shown in the PDF
     min_height_px    : controls the rendered box height in the PDF itself
+
+    IMAGE INSERTION: each call gets a 0-indexed slot number equal to its
+    registration order (front-cover = slot 0, then one slot per file in
+    book order: prereqs, then chapters, then extra sections — exactly
+    the order they appear in the_book.json's "structure"). If
+    images/{slot}.png exists on disk, it's embedded as a real <img>
+    instead of the dashed placeholder box. Missing files fall back to
+    the placeholder automatically, so a partial image set still builds
+    a complete PDF.
     """
-    idx = len(IMAGE_REGISTRY) + 1
+    idx  = len(IMAGE_REGISTRY) + 1     # 1-indexed marker (IMGSLOT-001, 002, ...)
+    slot = idx - 1                     # 0-indexed image filename (0.png, 1.png, ...)
     marker = f"IMGSLOT-{idx:03d}"
+
+    img_path  = IMAGES_DIR / f"{slot}.png"
+    has_image = img_path.exists()
+
     IMAGE_REGISTRY.append({
         "id": marker,
         "kind": kind,
@@ -822,14 +866,31 @@ def visual_placeholder(kind, description_ar, description_en, aspect_ratio,
         "description_ar": description_ar,
         "description_en": description_en,
         "aspect_ratio": aspect_ratio,
+        "slot": slot,
+        "has_image": has_image,
     })
+
+    ar_css = aspect_ratio.replace(":", "/")
+
+    if has_image:
+        # Relative path resolves against base_url=SCRIPT_DIR, which is
+        # passed into HTML(...).write_pdf() in __main__ — no need for
+        # an absolute file:// URL here.
+        rel_path = f"images/{slot}.png"
+        return (
+            f'<div class="visual-placeholder has-image" style="aspect-ratio:{ar_css}; min-height:{min_height_px}px">'
+            f'<img class="vp-img" src="{rel_path}" alt="{esc(description_ar)}">'
+            f'<div class="vp-marker">{marker}</div>'
+            f'</div>\n'
+        )
+
     # The marker is rendered as real (tiny, unobtrusive) text in the PDF
     # so the post-render pass can locate its page via text search. It is
     # styled to be visually negligible but NOT removed from the layout,
     # since WeasyPrint (correctly) does not expose a page-number-lookup
     # API from Python — searching rendered text is the reliable approach.
     return (
-        f'<div class="visual-placeholder" style="aspect-ratio:{aspect_ratio.replace(":","/")}; min-height:{min_height_px}px">'
+        f'<div class="visual-placeholder" style="aspect-ratio:{ar_css}; min-height:{min_height_px}px">'
         f'<div class="vp-cell">'
         f'<div class="vp-label">[ {esc(description_ar)} ]</div>'
         f'<div class="vp-sub">نسبة الأبعاد المقترحة: {esc(aspect_ratio)} &nbsp;·&nbsp; تُضاف لاحقاً</div>'

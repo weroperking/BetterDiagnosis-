@@ -40,7 +40,7 @@
 
 ---
 
-## IMGSLOT-004 — Page 19
+## IMGSLOT-004 — Page 20
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 03 — المضادات الحيوية
@@ -50,7 +50,7 @@
 
 ---
 
-## IMGSLOT-005 — Page 26
+## IMGSLOT-005 — Page 28
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 04 — المسكنات ومضادات الالتهاب
@@ -60,7 +60,7 @@
 
 ---
 
-## IMGSLOT-006 — Page 33
+## IMGSLOT-006 — Page 35
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 05 — أدوية القلب والأوعية
@@ -70,7 +70,7 @@
 
 ---
 
-## IMGSLOT-007 — Page 40
+## IMGSLOT-007 — Page 42
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 06 — الأشكال الصيدلانية
@@ -80,7 +80,7 @@
 
 ---
 
-## IMGSLOT-008 — Page 45
+## IMGSLOT-008 — Page 48
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 07 — قراءة الوصفة الطبية
@@ -90,7 +90,7 @@
 
 ---
 
-## IMGSLOT-009 — Page 55
+## IMGSLOT-009 — Page 59
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 08 — أسماء الأدوية الشائعة
@@ -100,7 +100,7 @@
 
 ---
 
-## IMGSLOT-010 — Page 69
+## IMGSLOT-010 — Page 73
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 01 — الجهاز العصبي والألم
@@ -110,7 +110,7 @@
 
 ---
 
-## IMGSLOT-011 — Page 87
+## IMGSLOT-011 — Page 91
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 02 — القلب والأوعية الدموية
@@ -120,7 +120,7 @@
 
 ---
 
-## IMGSLOT-012 — Page 96
+## IMGSLOT-012 — Page 100
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 03 — الأمراض المزمنة والأيضية
@@ -130,7 +130,7 @@
 
 ---
 
-## IMGSLOT-013 — Page 107
+## IMGSLOT-013 — Page 112
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 04 — الجهاز التنفسي والحساسية
@@ -140,7 +140,7 @@
 
 ---
 
-## IMGSLOT-014 — Page 127
+## IMGSLOT-014 — Page 132
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 05 — العيون والأذن والأنف
@@ -150,7 +150,7 @@
 
 ---
 
-## IMGSLOT-015 — Page 146
+## IMGSLOT-015 — Page 151
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 06 — الجهاز الهضمي والكبد
@@ -160,7 +160,7 @@
 
 ---
 
-## IMGSLOT-016 — Page 165
+## IMGSLOT-016 — Page 170
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 07 — المضادات الميكروبية
@@ -170,7 +170,7 @@
 
 ---
 
-## IMGSLOT-017 — Page 179
+## IMGSLOT-017 — Page 184
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 08 — الأدوية الحيوية والحقن
@@ -180,7 +180,7 @@
 
 ---
 
-## IMGSLOT-018 — Page 195
+## IMGSLOT-018 — Page 200
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 09 — الجلد والعناية الموضعية
@@ -190,7 +190,7 @@
 
 ---
 
-## IMGSLOT-019 — Page 213
+## IMGSLOT-019 — Page 218
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 10 — الفيتامينات والمكملات
@@ -200,7 +200,7 @@
 
 ---
 
-## IMGSLOT-020 — Page 233
+## IMGSLOT-020 — Page 238
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 11 — صحة المرأة والأطفال
@@ -210,7 +210,7 @@
 
 ---
 
-## IMGSLOT-021 — Page 253
+## IMGSLOT-021 — Page 258
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 12 — الإسعافات الأولية والطوارئ
@@ -220,7 +220,7 @@
 
 ---
 
-## IMGSLOT-022 — Page 274
+## IMGSLOT-022 — Page 280
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 01 — التفاعلات الدوائية
@@ -230,7 +230,7 @@
 
 ---
 
-## IMGSLOT-023 — Page 284
+## IMGSLOT-023 — Page 290
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 02 — قراءة نتائج التحاليل
@@ -240,7 +240,7 @@
 
 ---
 
-## IMGSLOT-024 — Page 292
+## IMGSLOT-024 — Page 299
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 03 — التخزين وإدارة المخزون
@@ -250,7 +250,7 @@
 
 ---
 
-## IMGSLOT-025 — Page 299
+## IMGSLOT-025 — Page 306
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 04 — المريض المسن في الصيدلية
@@ -260,7 +260,7 @@
 
 ---
 
-## IMGSLOT-026 — Page 306
+## IMGSLOT-026 — Page 313
 
 - **Kind:** `chapter-cover`
 - **Context:** الفصل 05 — الصيام والأدوية
